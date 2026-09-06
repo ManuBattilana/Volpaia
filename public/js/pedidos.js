@@ -311,7 +311,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         </div>
         <div class="detail-actions">
           ${phoneDigits ? `<a class="whatsapp-btn-large" href="https://wa.me/${phoneDigits}" target="_blank">${WhatsappIcon} WhatsApp cliente</a>` : ''}
-          ${order.order_pdf_path ? `<a class="btn btn-secondary" href="${order.order_pdf_path}" download="pedido-${order.order_number}.pdf">Descargar PDF</a>` : ''}
+          ${order.order_pdf_path ? `<button class="btn btn-secondary" id="btn-view-order-pdf">Ver PDF</button>` : ''}
           ${order.status_index === 0 ? '<button class="btn btn-ghost" id="btn-edit-items" title="Editar pedido">✎ Editar</button>' : ''}
           ${canRevert ? '<button class="btn btn-ghost" id="btn-revert">← Retroceder</button>' : ''}
         </div>
@@ -361,7 +361,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       ${order.preparation_pdf_path ? `
         <div class="detail-section">
           <h3>Preparación</h3>
-          <a class="btn btn-secondary" href="${order.preparation_pdf_path}" download="preparacion-${order.order_number}.pdf">Descargar lista de preparación</a>
+          <button class="btn btn-secondary" id="btn-view-prep-pdf">Ver lista de preparación</button>
         </div>
       ` : ''}
 
@@ -394,6 +394,12 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
     `;
 
     document.getElementById('btn-back').addEventListener('click', onBack);
+
+    const viewOrderPdfBtn = document.getElementById('btn-view-order-pdf');
+    if (viewOrderPdfBtn) viewOrderPdfBtn.addEventListener('click', () => openPdfPreview(order.order_pdf_path, `pedido-${order.order_number}.pdf`));
+
+    const viewPrepPdfBtn = document.getElementById('btn-view-prep-pdf');
+    if (viewPrepPdfBtn) viewPrepPdfBtn.addEventListener('click', () => openPdfPreview(order.preparation_pdf_path, `preparacion-${order.order_number}.pdf`));
 
     const editBtn = document.getElementById('btn-edit-items');
     if (editBtn) editBtn.addEventListener('click', startEditing);

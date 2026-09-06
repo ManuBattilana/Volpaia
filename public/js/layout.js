@@ -171,3 +171,20 @@ function confirmModal({ title, message, confirmLabel = 'Eliminar', onConfirm }) 
     onConfirm();
   });
 }
+
+function openPdfPreview(url, downloadName) {
+  const overlay = document.createElement('div');
+  overlay.className = 'pdf-preview-overlay';
+  overlay.innerHTML = `
+    <div class="pdf-preview-box">
+      <div class="pdf-preview-toolbar">
+        <a class="btn btn-secondary" href="${url}" download="${escapeHtml(downloadName || '')}">Descargar</a>
+        <button class="btn btn-ghost" id="pdf-preview-close">Cerrar ×</button>
+      </div>
+      <iframe src="${url}" title="Vista previa PDF"></iframe>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#pdf-preview-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
