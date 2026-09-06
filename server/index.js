@@ -13,7 +13,10 @@ const usersRouterFactory = require('./routes/users');
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'volpaia-dev-secret-change-me';
 
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+// VOLPAIA_UPLOAD_DIR: mismo motivo que VOLPAIA_DATA_DIR en server/db.js —
+// permite guardar las fotos fuera del checkout del repo, en una carpeta que
+// sobreviva a los redeploys.
+const UPLOAD_DIR = process.env.VOLPAIA_UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 async function start() {

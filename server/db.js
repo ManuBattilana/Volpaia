@@ -3,7 +3,12 @@ const fs = require('fs');
 const initSqlJs = require('sql.js');
 const bcrypt = require('bcryptjs');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// VOLPAIA_DATA_DIR permite apuntar la base de datos a una carpeta persistente
+// fuera del checkout del repo (algunos hostings, Hostinger incluido, vuelven
+// a clonar el código en cada deploy, así que cualquier dato guardado dentro
+// de esa carpeta se pierde salvo que viva en otro lado). Sin esa variable,
+// usa la carpeta local de siempre (útil para desarrollo).
+const DATA_DIR = process.env.VOLPAIA_DATA_DIR || path.join(__dirname, '..', 'data');
 const DB_FILE = path.join(DATA_DIR, 'volpaia.sqlite');
 
 // sql.js is a pure JavaScript/WebAssembly build of SQLite: it needs no native
