@@ -1,38 +1,11 @@
 async function renderInicio(container, user, onNavigate) {
   container.innerHTML = `
     <div class="greeting">Hola 👋 ${escapeHtml(user.name || user.username)}</div>
-    <div class="greeting-sub">¿Qué querés hacer hoy?</div>
-    <div class="dashboard-grid">
-      <button class="dash-card" data-key="clientes" style="border:none;text-align:left;">
-        <h3>Clientes</h3>
-        <p>Ver y gestionar tu cartera de clientes</p>
-      </button>
-      <button class="dash-card" data-key="productos" style="border:none;text-align:left;">
-        <h3>Productos</h3>
-        <p>Catálogo, precios y stock</p>
-      </button>
-      <button class="dash-card" data-key="pedidos" style="border:none;text-align:left;">
-        <h3>Pedidos</h3>
-        <p>Seguimiento de pedidos y despachos</p>
-      </button>
-      <button class="dash-card" data-key="contactos" style="border:none;text-align:left;">
-        <h3>Contactos</h3>
-        <p>Seguimiento de posibles clientes</p>
-      </button>
-      <button class="dash-card" data-key="comisiones" style="border:none;text-align:left;">
-        <h3>Comisiones</h3>
-        <p>Comisiones generadas y cobros</p>
-      </button>
-    </div>
-
-    <div class="greeting-sub" style="margin-top:32px;font-weight:700;color:var(--pink-dark);font-size:16px;">Resumen</div>
+    <div class="greeting-sub">Este es tu resumen de hoy.</div>
     <div id="dashboard-widgets" class="dashboard-grid" style="margin-top:12px;">
       <div class="empty-state">Cargando...</div>
     </div>
   `;
-  container.querySelectorAll('.dash-card[data-key]').forEach(el => {
-    el.addEventListener('click', () => onNavigate(el.dataset.key));
-  });
 
   let stats;
   try {

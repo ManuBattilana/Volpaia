@@ -311,7 +311,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         </div>
         <div class="detail-actions">
           ${phoneDigits ? `<a class="whatsapp-btn-large" href="https://wa.me/${phoneDigits}" target="_blank">${WhatsappIcon} WhatsApp cliente</a>` : ''}
-          ${order.order_pdf_path ? `<a class="btn btn-secondary" href="${order.order_pdf_path}" target="_blank">Descargar PDF</a>` : ''}
+          ${order.order_pdf_path ? `<a class="btn btn-secondary" href="${order.order_pdf_path}" download="pedido-${order.order_number}.pdf">Descargar PDF</a>` : ''}
           ${order.status_index === 0 ? '<button class="btn btn-ghost" id="btn-edit-items" title="Editar pedido">✎ Editar</button>' : ''}
           ${canRevert ? '<button class="btn btn-ghost" id="btn-revert">← Retroceder</button>' : ''}
         </div>
@@ -361,7 +361,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       ${order.preparation_pdf_path ? `
         <div class="detail-section">
           <h3>Preparación</h3>
-          <a class="btn btn-secondary" href="${order.preparation_pdf_path}" target="_blank">Ver / descargar lista de preparación</a>
+          <a class="btn btn-secondary" href="${order.preparation_pdf_path}" download="preparacion-${order.order_number}.pdf">Descargar lista de preparación</a>
         </div>
       ` : ''}
 

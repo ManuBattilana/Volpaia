@@ -18,12 +18,16 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="layout">
-      <aside class="sidebar">
+      <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+      <aside class="sidebar" id="sidebar">
         <div class="logo-wrap"><span class="brand">VOLPAIA</span></div>
         <nav id="sidebar-nav"></nav>
       </aside>
       <div class="main-column">
         <header class="topbar">
+          <button class="hamburger-btn" id="hamburger-btn" aria-label="Abrir menú">
+            <span></span><span></span><span></span>
+          </button>
           <div class="topbar-spacer"></div>
           <div class="topbar-right">
             <div class="notif-bell-wrap">
@@ -41,13 +45,30 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
     </div>
   `;
 
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+
+  function closeDrawer() {
+    sidebar.classList.remove('open');
+    backdrop.hidden = true;
+  }
+  function openDrawer() {
+    sidebar.classList.add('open');
+    backdrop.hidden = false;
+  }
+
+  document.getElementById('hamburger-btn').addEventListener('click', () => {
+    if (sidebar.classList.contains('open')) closeDrawer(); else openDrawer();
+  });
+  backdrop.addEventListener('click', closeDrawer);
+
   const nav = document.getElementById('sidebar-nav');
   MENU_ITEMS.forEach(item => {
     const btn = document.createElement('button');
     btn.className = 'nav-item' + (item.key === activeKey ? ' active' : '') + (!item.enabled ? ' disabled' : '');
     btn.textContent = item.label;
     if (item.enabled) {
-      btn.addEventListener('click', () => onNavigate(item.key));
+      btn.addEventListener('click', () => { closeDrawer(); onNavigate(item.key); });
     } else {
       btn.title = 'Próximamente';
     }
