@@ -49,13 +49,19 @@ function drawHeader(doc, title, order, seller) {
   doc.moveDown(1);
 }
 
-function drawClientBlock(doc, client) {
+function drawClientBlock(doc, client, order) {
   doc.fillColor('#000000').fontSize(11).text(`Cliente: ${clientLabel(client)}`);
   doc.fontSize(10).fillColor(TEXT_MUTED);
   if (client.phone) doc.text(`Tel: ${client.phone}`);
   const addressParts = [client.address, client.locality, client.province].filter(Boolean);
   if (addressParts.length) doc.text(`Dirección: ${addressParts.join(', ')}`);
-  const shipping = shippingLine(client);
+  // El envío del pedido puede haberse corregido puntualmente; si no, se usa
+  // el habitual del cliente.
+  const shipping = shippingLine({
+    shipping_type: (order && order.shipping_type) || client.shipping_type,
+    shipping_carrier: (order && order.shipping_carrier) || client.shipping_carrier,
+    shipping_address: client.shipping_address,
+  });
   if (shipping) doc.text(shipping);
   doc.moveDown(1);
 }
@@ -72,7 +78,7 @@ function generateOrderPdf(filePath, { order, items, client, seller }) {
     doc.pipe(stream);
 
     drawHeader(doc, 'Pedido', order, seller);
-    drawClientBlock(doc, client);
+    drawClientBlock(doc, client, order);
 
     const colX = { desc: 40, pres: 260, qty: 340, price: 400, subtotal: 470 };
     doc.fontSize(10).fillColor(PINK_DARK);
@@ -128,7 +134,7 @@ function generatePreparationPdf(filePath, { order, items, client, seller }) {
     doc.pipe(stream);
 
     drawHeader(doc, 'Lista de preparación', order, seller);
-    drawClientBlock(doc, client);
+    drawClientBlock(doc, client, order);
 
     doc.fontSize(11);
     items.forEach(it => {

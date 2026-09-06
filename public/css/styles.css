@@ -278,6 +278,17 @@ a { color: var(--pink-dark); }
 }
 .search-bar input[type="text"]:focus { outline: 2px solid var(--pink-dark); }
 
+.text-input {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  background: var(--white);
+  font-family: inherit;
+}
+.text-input:focus { outline: 2px solid var(--pink-dark); }
+
 .filter-chip {
   display: inline-flex;
   align-items: center;

@@ -194,7 +194,7 @@ router.get('/:id', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { client_id, notes, items } = req.body || {};
+  const { client_id, notes, items, shipping_type, shipping_carrier } = req.body || {};
   if (!client_id) return res.status(400).json({ error: 'Falta el cliente' });
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'El pedido necesita al menos un producto' });
@@ -209,12 +209,17 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
+  // El envío se completa con el del cliente salvo que se indique otro
+  // puntualmente para este pedido.
+  const finalShippingType = shipping_type !== undefined ? shipping_type : client.shipping_type;
+  const finalShippingCarrier = shipping_carrier !== undefined ? shipping_carrier : client.shipping_carrier;
+
   const orderNumber = nextOrderNumber();
   const tx = db.transaction(() => {
     const info = db.prepare(`
-      INSERT INTO orders (order_number, client_id, status_index, notes, created_by)
-      VALUES (?, ?, 0, ?, ?)
-    `).run(orderNumber, client_id, notes || null, req.currentUser.id);
+      INSERT INTO orders (order_number, client_id, status_index, notes, created_by, shipping_type, shipping_carrier)
+      VALUES (?, ?, 0, ?, ?, ?, ?)
+    `).run(orderNumber, client_id, notes || null, req.currentUser.id, finalShippingType || null, finalShippingCarrier || null);
     const orderId = info.lastInsertRowid;
     const insertItem = db.prepare('INSERT INTO order_items (order_id, product_id, quantity, presentation, unit_price) VALUES (?, ?, ?, ?, ?)');
     preparedItems.forEach(it => insertItem.run(orderId, it.product_id, it.quantity, it.presentation, it.unit_price));
@@ -240,7 +245,7 @@ router.put('/:id', async (req, res) => {
   if (order.status_index !== 0) {
     return res.status(400).json({ error: 'El pedido ya no se puede editar (ya fue confirmado)' });
   }
-  const { notes, items } = req.body || {};
+  const { notes, items, shipping_type, shipping_carrier } = req.body || {};
 
   let preparedItems = null;
   if (Array.isArray(items)) {
@@ -252,8 +257,15 @@ router.put('/:id', async (req, res) => {
   }
 
   const tx = db.transaction(() => {
-    db.prepare(`UPDATE orders SET notes = ?, modified = 1, updated_at = datetime('now') WHERE id = ?`)
-      .run(notes !== undefined ? notes : order.notes, order.id);
+    db.prepare(`
+      UPDATE orders SET notes = ?, shipping_type = ?, shipping_carrier = ?, modified = 1, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      notes !== undefined ? notes : order.notes,
+      shipping_type !== undefined ? shipping_type : order.shipping_type,
+      shipping_carrier !== undefined ? shipping_carrier : order.shipping_carrier,
+      order.id
+    );
 
     if (preparedItems) {
       db.prepare('DELETE FROM order_items WHERE order_id = ?').run(order.id);

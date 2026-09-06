@@ -107,17 +107,35 @@ async function renderPedidoForm(container, onBack, onCreated) {
     <div class="detail-section">
       <h3>Cliente</h3>
       <div id="client-picker">
-        <input type="text" id="client-search" placeholder="Buscar cliente por nombre o emprendimiento...">
+        <input type="text" id="client-search" class="text-input" placeholder="Buscar cliente por nombre o emprendimiento...">
         <div id="client-results" style="margin-top:8px;"></div>
       </div>
       <div id="client-selected" style="display:none;margin-top:10px;font-weight:600;color:var(--pink-dark);"></div>
     </div>
 
+    <div class="detail-section" id="shipping-section" style="display:none;">
+      <h3>Envío</h3>
+      <div class="field-grid">
+        <div class="field">
+          <label>Tipo de envío</label>
+          <select id="order-shipping-type">
+            <option value="">—</option>
+            <option value="Domicilio">Domicilio</option>
+            <option value="Sucursal">Sucursal</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Transporte habitual</label>
+          <input type="text" id="order-shipping-carrier" class="text-input">
+        </div>
+      </div>
+    </div>
+
     <div class="detail-section">
       <h3>Productos</h3>
-      <input type="text" id="product-search" placeholder="Buscar producto por código o descripción...">
+      <input type="text" id="product-search" class="text-input" placeholder="Buscar producto por código o descripción...">
       <div id="product-results" style="margin-top:8px;"></div>
-      <table style="width:100%;border-collapse:collapse;margin-top:16px;" id="items-table">
+      <table style="width:100%;border-collapse:collapse;margin-top:16px;" id="items-table" class="items-table-responsive">
         <thead>
           <tr style="text-align:left;border-bottom:2px solid var(--border);">
             <th style="padding:8px 4px;">Producto</th>
@@ -166,6 +184,9 @@ async function renderPedidoForm(container, onBack, onCreated) {
           const name = [c.first_name, c.last_name].filter(Boolean).join(' ');
           document.getElementById('client-selected').style.display = 'block';
           document.getElementById('client-selected').textContent = `Cliente seleccionado: #${c.client_number} ${name}${c.business_name ? ' — ' + c.business_name : ''}`;
+          document.getElementById('shipping-section').style.display = 'block';
+          document.getElementById('order-shipping-type').value = c.shipping_type || '';
+          document.getElementById('order-shipping-carrier').value = c.shipping_carrier || '';
           resultsEl.innerHTML = '';
           clientSearch.value = '';
         });
@@ -211,16 +232,16 @@ async function renderPedidoForm(container, onBack, onCreated) {
       const subtotal = it.unitPrice * it.quantity;
       return `
         <tr data-idx="${idx}" style="border-bottom:1px solid var(--border);">
-          <td style="padding:8px 4px;">${escapeHtml(it.product.code || '')}</td>
-          <td style="padding:8px 4px;">
+          <td style="padding:8px 4px;" data-label="Producto">${escapeHtml(it.product.code || '')}</td>
+          <td style="padding:8px 4px;" data-label="Presentación">
             <select data-role="presentation" style="padding:6px;border-radius:6px;border:1px solid var(--border);">
               ${allowed.map(p => `<option value="${p.key}" ${p.key === it.presentation ? 'selected' : ''}>${p.key}</option>`).join('')}
             </select>
           </td>
-          <td style="padding:8px 4px;"><input type="number" min="1" step="1" data-role="quantity" value="${it.quantity}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
-          <td style="padding:8px 4px;"><input type="number" min="0" step="0.01" data-role="price" value="${it.unitPrice}" style="width:100px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
-          <td style="padding:8px 4px;font-weight:600;">${formatMoney(subtotal)}</td>
-          <td style="padding:8px 4px;"><button class="btn btn-danger" data-role="remove" style="padding:4px 10px;font-size:12px;">×</button></td>
+          <td style="padding:8px 4px;" data-label="Cantidad"><input type="number" min="1" step="1" data-role="quantity" value="${it.quantity}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
+          <td style="padding:8px 4px;" data-label="Precio unit."><input type="number" min="0" step="0.01" data-role="price" value="${it.unitPrice}" style="width:100px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
+          <td style="padding:8px 4px;font-weight:600;" data-label="Subtotal">${formatMoney(subtotal)}</td>
+          <td style="padding:8px 4px;"><button class="btn btn-danger" data-role="remove" style="padding:4px 10px;font-size:12px;">Quitar</button></td>
         </tr>
       `;
     }).join('');
@@ -257,6 +278,8 @@ async function renderPedidoForm(container, onBack, onCreated) {
     const payload = {
       client_id: selectedClient.id,
       notes: document.getElementById('order-notes').value,
+      shipping_type: document.getElementById('order-shipping-type').value,
+      shipping_carrier: document.getElementById('order-shipping-carrier').value,
       items: items.map(it => ({ product_id: it.product.id, presentation: it.presentation, quantity: it.quantity, unit_price: it.unitPrice }))
     };
     try {
@@ -450,9 +473,9 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       <div class="page-header"><h2>Editar pedido #${order.order_number}</h2></div>
       <div class="detail-section">
         <h3>Productos</h3>
-        <input type="text" id="product-search" placeholder="Buscar producto por código o descripción...">
+        <input type="text" id="product-search" class="text-input" placeholder="Buscar producto por código o descripción...">
         <div id="product-results" style="margin-top:8px;"></div>
-        <table style="width:100%;border-collapse:collapse;margin-top:16px;">
+        <table style="width:100%;border-collapse:collapse;margin-top:16px;" class="items-table-responsive">
           <thead>
             <tr style="text-align:left;border-bottom:2px solid var(--border);">
               <th style="padding:8px 4px;">Producto</th>
@@ -513,16 +536,16 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         const subtotal = it.unitPrice * it.quantity;
         return `
           <tr data-idx="${idx}" style="border-bottom:1px solid var(--border);">
-            <td style="padding:8px 4px;">${escapeHtml(it.product.code || '')}</td>
-            <td style="padding:8px 4px;">
+            <td style="padding:8px 4px;" data-label="Producto">${escapeHtml(it.product.code || '')}</td>
+            <td style="padding:8px 4px;" data-label="Presentación">
               <select data-role="presentation" style="padding:6px;border-radius:6px;border:1px solid var(--border);">
                 ${allowed.map(p => `<option value="${p.key}" ${p.key === it.presentation ? 'selected' : ''}>${p.key}</option>`).join('')}
               </select>
             </td>
-            <td style="padding:8px 4px;"><input type="number" min="1" step="1" data-role="quantity" value="${it.quantity}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
-            <td style="padding:8px 4px;"><input type="number" min="0" step="0.01" data-role="price" value="${it.unitPrice}" style="width:100px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
-            <td style="padding:8px 4px;font-weight:600;">${formatMoney(subtotal)}</td>
-            <td style="padding:8px 4px;"><button class="btn btn-danger" data-role="remove" style="padding:4px 10px;font-size:12px;">×</button></td>
+            <td style="padding:8px 4px;" data-label="Cantidad"><input type="number" min="1" step="1" data-role="quantity" value="${it.quantity}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
+            <td style="padding:8px 4px;" data-label="Precio unit."><input type="number" min="0" step="0.01" data-role="price" value="${it.unitPrice}" style="width:100px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
+            <td style="padding:8px 4px;font-weight:600;" data-label="Subtotal">${formatMoney(subtotal)}</td>
+            <td style="padding:8px 4px;"><button class="btn btn-danger" data-role="remove" style="padding:4px 10px;font-size:12px;">Quitar</button></td>
           </tr>
         `;
       }).join('');
@@ -566,8 +589,19 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
     const el = document.getElementById('step-section');
 
     if (order.status_index === 0) {
+      const shippingLabel = [order.shipping_type, order.shipping_carrier].filter(Boolean).join(' · ') || 'Sin definir';
       el.innerHTML = `
         <h3>Confirmar o cancelar</h3>
+        <div class="field" style="max-width:340px;margin-bottom:14px;">
+          <label>Envío</label>
+          <select id="order-shipping-type-edit">
+            <option value="">—</option>
+            <option value="Domicilio" ${order.shipping_type === 'Domicilio' ? 'selected' : ''}>Domicilio</option>
+            <option value="Sucursal" ${order.shipping_type === 'Sucursal' ? 'selected' : ''}>Sucursal</option>
+          </select>
+          <input type="text" id="order-shipping-carrier-edit" class="text-input" style="margin-top:8px;" placeholder="Transporte habitual" value="${escapeHtml(order.shipping_carrier || '')}">
+          <button class="btn btn-ghost" id="btn-save-shipping" style="margin-top:8px;">Guardar envío</button>
+        </div>
         <p style="font-size:13px;color:var(--text-muted);">Enviale el PDF por WhatsApp a Damián para que genere la Factura X, y confirmá el pedido cuando esté todo en orden.</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-secondary" id="btn-whatsapp-damian">WhatsApp a Damián</button>
@@ -575,6 +609,15 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
           <button class="btn btn-danger" id="btn-cancel-order">Cancelar pedido</button>
         </div>
       `;
+      document.getElementById('btn-save-shipping').addEventListener('click', async () => {
+        try {
+          order = await Api.put(`/api/orders/${order.id}`, {
+            shipping_type: document.getElementById('order-shipping-type-edit').value,
+            shipping_carrier: document.getElementById('order-shipping-carrier-edit').value,
+          });
+          draw();
+        } catch (err) { alert(err.message); }
+      });
       document.getElementById('btn-whatsapp-damian').addEventListener('click', async () => {
         const settings = await Api.get('/api/settings');
         if (!settings.damian_phone) { alert('Cargá el teléfono de Damián en Configuración.'); return; }
@@ -582,8 +625,15 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         const text = encodeURIComponent(`Pedido #${order.order_number} adjunto (recordá adjuntar el PDF descargado).`);
         window.open(`https://wa.me/${digits}?text=${text}`, '_blank');
       });
-      document.getElementById('btn-confirm').addEventListener('click', async () => {
-        try { order = await Api.post(`/api/orders/${order.id}/advance`, {}); draw(); } catch (err) { alert(err.message); }
+      document.getElementById('btn-confirm').addEventListener('click', () => {
+        confirmModal({
+          title: 'Confirmar pedido',
+          message: `Envío: ${shippingLabel}. ¿Confirmás el pedido #${order.order_number} con estos datos?`,
+          confirmLabel: 'Confirmar pedido',
+          onConfirm: async () => {
+            try { order = await Api.post(`/api/orders/${order.id}/advance`, {}); draw(); } catch (err) { alert(err.message); }
+          }
+        });
       });
       document.getElementById('btn-cancel-order').addEventListener('click', () => {
         confirmModal({
