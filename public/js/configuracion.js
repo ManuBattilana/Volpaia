@@ -22,6 +22,10 @@ async function renderConfiguracion(container, currentUser) {
           <label>Porcentaje de comisión</label>
           <input type="number" min="0" step="0.1" id="cfg-commission" value="${settings.commission_percentage}">
         </div>
+        <div class="field">
+          <label>Teléfono de Damián (WhatsApp)</label>
+          <input type="text" id="cfg-damian-phone" placeholder="Ej: 549351..." value="${escapeHtml(settings.damian_phone || '')}">
+        </div>
       </div>
       <button class="btn btn-primary" id="btn-save-settings" style="margin-top:16px;">Guardar cambios</button>
       <div id="settings-msg" style="margin-top:10px;font-size:13px;"></div>
@@ -42,6 +46,7 @@ async function renderConfiguracion(container, currentUser) {
         reminder_days_1: document.getElementById('cfg-days1').value,
         reminder_days_2: document.getElementById('cfg-days2').value,
         commission_percentage: document.getElementById('cfg-commission').value,
+        damian_phone: document.getElementById('cfg-damian-phone').value,
       });
       msg.style.color = '#2e7d32';
       msg.textContent = 'Guardado correctamente.';

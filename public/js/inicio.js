@@ -15,10 +15,10 @@ function renderInicio(container, user, onNavigate) {
         <h3>Pedidos</h3>
         <p>Seguimiento de pedidos y despachos</p>
       </button>
-      <div class="dash-card disabled">
+      <button class="dash-card" data-key="contactos" style="border:none;text-align:left;">
         <h3>Contactos</h3>
-        <p>Próximamente</p>
-      </div>
+        <p>Seguimiento de posibles clientes</p>
+      </button>
       <div class="dash-card disabled">
         <h3>Comisiones</h3>
         <p>Próximamente</p>

@@ -1,6 +1,6 @@
 const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', enabled: true },
-  { key: 'contactos', label: 'Contactos', enabled: false },
+  { key: 'contactos', label: 'Contactos', enabled: true },
   { key: 'clientes', label: 'Clientes', enabled: true },
   { key: 'productos', label: 'Productos', enabled: true },
   { key: 'pedidos', label: 'Pedidos', enabled: true },

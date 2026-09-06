@@ -9,6 +9,7 @@ const ordersRouterFactory = require('./routes/orders');
 const notificationsRouterFactory = require('./routes/notifications');
 const settingsRouterFactory = require('./routes/settings');
 const usersRouterFactory = require('./routes/users');
+const contactsRouterFactory = require('./routes/contacts');
 
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'volpaia-dev-secret-change-me';
@@ -266,11 +267,12 @@ async function start() {
     res.json({ ok: true });
   });
 
-  // ---------- Orders / Notifications / Settings / Users API ----------
-  app.use('/api/orders', requireAuth, ordersRouterFactory(db));
+  // ---------- Orders / Notifications / Settings / Users / Contacts API ----------
+  app.use('/api/orders', requireAuth, ordersRouterFactory(db, UPLOAD_DIR));
   app.use('/api/notifications', requireAuth, notificationsRouterFactory(db));
   app.use('/api/settings', requireAuth, settingsRouterFactory(db));
   app.use('/api/users', requireAuth, usersRouterFactory(db));
+  app.use('/api/contacts', requireAuth, contactsRouterFactory(db));
 
   // ---------- Static frontend ----------
   app.use(express.static(path.join(__dirname, '..', 'public')));

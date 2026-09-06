@@ -90,6 +90,16 @@ function draw() {
     );
   } else if (page === 'configuracion') {
     renderConfiguracion(content, Nav.user);
+  } else if (page === 'contactos') {
+    renderContactosList(content, (id) => navigateTo('contacto-detalle', { id }));
+  } else if (page === 'contacto-detalle') {
+    renderContactDetail(
+      content,
+      Nav.route.id,
+      () => navigateTo('contactos'),
+      () => navigateTo('contactos'),
+      (clientId) => navigateTo('cliente-detalle', { id: clientId })
+    );
   }
 }
 

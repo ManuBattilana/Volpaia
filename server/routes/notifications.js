@@ -7,7 +7,7 @@ function checkReminders() {
   const settings = db.prepare('SELECT reminder_days_1, reminder_days_2 FROM settings WHERE id = 1').get();
   const orders = db.prepare(`
     SELECT * FROM orders
-    WHERE status_index >= 9 AND shipping_date IS NOT NULL
+    WHERE status_index >= 8 AND cancelled = 0 AND shipping_date IS NOT NULL
       AND (reminder_1_done = 0 OR reminder_2_done = 0)
   `).all();
 

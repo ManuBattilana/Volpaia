@@ -160,9 +160,33 @@ CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   reminder_days_1 INTEGER NOT NULL DEFAULT 4,
   reminder_days_2 INTEGER NOT NULL DEFAULT 15,
-  commission_percentage REAL NOT NULL DEFAULT 5
+  commission_percentage REAL NOT NULL DEFAULT 5,
+  damian_phone TEXT
 );
 INSERT OR IGNORE INTO settings (id, reminder_days_1, reminder_days_2, commission_percentage) VALUES (1, 4, 15, 5);
+
+CREATE TABLE IF NOT EXISTS contacts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  first_name TEXT,
+  last_name TEXT,
+  business_name TEXT,
+  locality TEXT,
+  province TEXT,
+  phone TEXT,
+  notes TEXT,
+  website TEXT,
+  facebook TEXT,
+  instagram TEXT,
+  tiktok TEXT,
+  first_contact_date TEXT DEFAULT (datetime('now')),
+  status TEXT NOT NULL DEFAULT 'Activo',
+  source TEXT,
+  catalog_sent_history TEXT DEFAULT '',
+  pricelist_sent_history TEXT DEFAULT '',
+  converted_client_id INTEGER REFERENCES clients(id),
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
 
 CREATE TABLE IF NOT EXISTS orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -233,6 +257,21 @@ CREATE TABLE IF NOT EXISTS notifications (
     }
   }
   ensureColumn('users', 'role', "TEXT NOT NULL DEFAULT 'staff'");
+  ensureColumn('settings', 'damian_phone', 'TEXT');
+
+  // Columnas del flujo de pedidos de 9 pasos (reemplaza el flujo anterior de 11)
+  ensureColumn('orders', 'cancelled', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('orders', 'finalized', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('orders', 'modified', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('orders', 'order_pdf_path', 'TEXT');
+  ensureColumn('orders', 'preparation_pdf_path', 'TEXT');
+  ensureColumn('orders', 'invoice_attachment_url', 'TEXT');
+  ensureColumn('orders', 'transfer_attachment_url', 'TEXT');
+  ensureColumn('orders', 'payment_attachment_url', 'TEXT');
+  // Cualquier pedido que haya quedado del flujo viejo de 11 pasos (todos de
+  // prueba) se lleva al principio del flujo nuevo para no dejarlo en un
+  // índice de estado que ya no existe.
+  db.prepare('UPDATE orders SET status_index = 0 WHERE status_index > 8').run();
 
   // Seed default user (Melany, owner role) if none exists
   const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
