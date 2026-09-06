@@ -172,19 +172,72 @@ function confirmModal({ title, message, confirmLabel = 'Eliminar', onConfirm }) 
   });
 }
 
-function openPdfPreview(url, downloadName) {
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.js';
+}
+
+// Renderiza el PDF con PDF.js sobre un <canvas> en vez de dejar que cada
+// navegador lo muestre a su manera (en iOS el visor nativo de Chrome llegó
+// a mostrar en blanco algunos PDF generados con pdfkit, y el atributo
+// "download" en un <a> no se respeta de forma confiable en iOS). Así el
+// resultado es el mismo en cualquier navegador, y la descarga real se hace
+// con fetch + blob, que sí funciona de forma consistente en iOS.
+async function openPdfPreview(url, downloadName) {
   const overlay = document.createElement('div');
   overlay.className = 'pdf-preview-overlay';
   overlay.innerHTML = `
     <div class="pdf-preview-box">
       <div class="pdf-preview-toolbar">
-        <a class="btn btn-secondary" href="${url}" download="${escapeHtml(downloadName || '')}">Descargar</a>
+        <button class="btn btn-secondary" id="pdf-preview-download">Descargar</button>
         <button class="btn btn-ghost" id="pdf-preview-close">Cerrar ×</button>
       </div>
-      <iframe src="${url}" title="Vista previa PDF"></iframe>
+      <div class="pdf-preview-pages" id="pdf-preview-pages">
+        <div class="empty-state">Cargando PDF...</div>
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
-  overlay.querySelector('#pdf-preview-close').addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  const close = () => overlay.remove();
+  overlay.querySelector('#pdf-preview-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  let pdfBlob;
+  try {
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('No se pudo descargar el archivo');
+    pdfBlob = await res.blob();
+  } catch (err) {
+    document.getElementById('pdf-preview-pages').innerHTML = '<div class="empty-state">No se pudo cargar el PDF.</div>';
+    return;
+  }
+
+  overlay.querySelector('#pdf-preview-download').addEventListener('click', () => {
+    const blobUrl = URL.createObjectURL(pdfBlob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = downloadName || 'documento.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+  });
+
+  const pagesEl = document.getElementById('pdf-preview-pages');
+  try {
+    const arrayBuffer = await pdfBlob.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    pagesEl.innerHTML = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: Math.min(1.5, (pagesEl.clientWidth || 700) / page.getViewport({ scale: 1 }).width) });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      canvas.className = 'pdf-preview-canvas';
+      pagesEl.appendChild(canvas);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    }
+  } catch (err) {
+    pagesEl.innerHTML = '<div class="empty-state">No se pudo mostrar la vista previa. Probá descargarlo.</div>';
+  }
 }
