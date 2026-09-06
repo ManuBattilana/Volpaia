@@ -1,6 +1,18 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const { generateOrderPdf, generatePreparationPdf } = require('../lib/pdf');
+
+// Verificación mínima de que el archivo generado es un PDF de verdad
+// (encabezado %PDF- y algo de contenido) antes de darlo por válido —
+// si algo falla en el generador, mejor un error claro en los logs que
+// un archivo "listo" que en realidad está roto o vacío.
+function assertValidPdf(filePath) {
+  const buffer = fs.readFileSync(filePath);
+  if (buffer.length < 100 || buffer.slice(0, 5).toString('ascii') !== '%PDF-') {
+    throw new Error(`El PDF generado en ${filePath} no es válido (tamaño: ${buffer.length} bytes)`);
+  }
+}
 
 const STATUSES = [
   'Pedido creado',
@@ -129,6 +141,7 @@ function regenerateOrderPdf(orderId) {
   const filename = `pedido-${order.order_number}.pdf`;
   const filePath = path.join(uploadDir, filename);
   return generateOrderPdf(filePath, { order, items, client, seller }).then(() => {
+    assertValidPdf(filePath);
     db.prepare('UPDATE orders SET order_pdf_path = ? WHERE id = ?').run(`/uploads/${filename}`, orderId);
   });
 }
@@ -141,6 +154,7 @@ function generatePrepPdf(orderId) {
   const filename = `preparacion-${order.order_number}.pdf`;
   const filePath = path.join(uploadDir, filename);
   return generatePreparationPdf(filePath, { order, items, client, seller }).then(() => {
+    assertValidPdf(filePath);
     db.prepare('UPDATE orders SET preparation_pdf_path = ? WHERE id = ?').run(`/uploads/${filename}`, orderId);
   });
 }

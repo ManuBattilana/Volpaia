@@ -9,6 +9,7 @@ const MENU_ITEMS = [
 ];
 
 const BellIcon = `<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>`;
+const LogoutIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 
 let notifPollInterval = null;
 
@@ -35,7 +36,7 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
               <div class="notif-dropdown" id="notif-dropdown" hidden></div>
             </div>
             <span class="topbar-username">Hola, ${escapeHtml(user.name || user.username)}</span>
-            <button class="logout-btn" id="logout-btn">Cerrar sesión</button>
+            <button class="logout-btn" id="logout-btn" title="Cerrar sesión">${LogoutIcon}</button>
           </div>
         </header>
         <main class="content" id="content">

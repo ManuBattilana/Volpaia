@@ -1,8 +1,24 @@
 const fs = require('fs');
+const path = require('path');
 const PDFDocument = require('pdfkit');
 
 const PINK_DARK = '#9B1B57';
 const TEXT_MUTED = '#666666';
+
+// pdfkit's "standard 14" fonts (Helvetica, etc.) load their metrics from
+// data files bundled inside the pdfkit package itself. En algunos hostings
+// esa resolución de archivos internos del paquete falla silenciosamente
+// (el documento "termina" de generarse sin tirar error, pero el texto no se
+// dibuja y queda una página en blanco). Para no depender de eso, registramos
+// una tipografía propia que viaja con nuestro código en vez de con pdfkit.
+const FONT_REGULAR = path.join(__dirname, '..', 'assets', 'fonts', 'WorkSans-Regular.ttf');
+const FONT_BOLD = path.join(__dirname, '..', 'assets', 'fonts', 'WorkSans-Bold.ttf');
+
+function useOwnFonts(doc) {
+  doc.registerFont('Body', FONT_REGULAR);
+  doc.registerFont('Bold', FONT_BOLD);
+  doc.font('Body');
+}
 
 function clientLabel(client) {
   const name = [client.first_name, client.last_name].filter(Boolean).join(' ');
@@ -24,8 +40,9 @@ function shippingLine(client) {
 }
 
 function drawHeader(doc, title, order, seller) {
-  doc.fillColor(PINK_DARK).fontSize(20).text('VOLPAIA', { continued: false });
+  doc.font('Bold').fillColor(PINK_DARK).fontSize(20).text('VOLPAIA', { continued: false });
   doc.fontSize(14).fillColor('#000000').text(title);
+  doc.font('Body');
   doc.moveDown(0.3);
   doc.fontSize(10).fillColor(TEXT_MUTED)
     .text(`Pedido #${order.order_number} · ${new Date().toLocaleDateString('es-AR')}${seller ? ' · Vendedor: ' + seller : ''}`);
@@ -50,6 +67,7 @@ function drawClientBlock(doc, client) {
 function generateOrderPdf(filePath, { order, items, client, seller }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40 });
+    useOwnFonts(doc);
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
 
@@ -105,6 +123,7 @@ function generateOrderPdf(filePath, { order, items, client, seller }) {
 function generatePreparationPdf(filePath, { order, items, client, seller }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40 });
+    useOwnFonts(doc);
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
 
