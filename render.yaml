@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: volpaia-gestion
+    runtime: node
+    plan: free
+    branch: claude/volpaia-internal-management-hpujey
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: VOLPAIA_ADMIN_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
