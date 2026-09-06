@@ -1,16 +1,91 @@
 const path = require('path');
 const fs = require('fs');
-const Database = require('better-sqlite3');
+const initSqlJs = require('sql.js');
 const bcrypt = require('bcryptjs');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const DB_FILE = path.join(DATA_DIR, 'volpaia.sqlite');
 
-const db = new Database(path.join(DATA_DIR, 'volpaia.db'));
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+// sql.js is a pure JavaScript/WebAssembly build of SQLite: it needs no native
+// compilation step, unlike better-sqlite3 (which requires node-gyp + a
+// matching glibc/Python toolchain that many shared hosts, like Hostinger's
+// shared Node hosting, do not provide). Because it keeps the database
+// entirely in memory, every write is followed by exporting the whole file
+// back to disk — perfectly fine at this app's scale (a small wholesale
+// business), and it keeps the exact same synchronous prepare/run/get/all
+// API surface the rest of the codebase already relies on.
+async function createDb() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-db.exec(`
+  const SQL = await initSqlJs();
+  const fileBuffer = fs.existsSync(DB_FILE) ? fs.readFileSync(DB_FILE) : undefined;
+  const raw = new SQL.Database(fileBuffer);
+
+  let inTransaction = false;
+  function persist() {
+    if (inTransaction) return;
+    fs.writeFileSync(DB_FILE, Buffer.from(raw.export()));
+  }
+
+  const db = {
+    exec(sql) {
+      raw.exec(sql);
+      persist();
+    },
+    pragma(str) {
+      raw.run('PRAGMA ' + str);
+    },
+    prepare(sql) {
+      return {
+        run(...params) {
+          raw.run(sql, params);
+          const changes = raw.getRowsModified();
+          let lastInsertRowid;
+          const res = raw.exec('SELECT last_insert_rowid() AS id');
+          if (res[0]) lastInsertRowid = res[0].values[0][0];
+          persist();
+          return { changes, lastInsertRowid };
+        },
+        get(...params) {
+          const stmt = raw.prepare(sql);
+          stmt.bind(params);
+          let row;
+          if (stmt.step()) row = stmt.getAsObject();
+          stmt.free();
+          return row;
+        },
+        all(...params) {
+          const stmt = raw.prepare(sql);
+          stmt.bind(params);
+          const rows = [];
+          while (stmt.step()) rows.push(stmt.getAsObject());
+          stmt.free();
+          return rows;
+        },
+      };
+    },
+    transaction(fn) {
+      return (...args) => {
+        inTransaction = true;
+        raw.run('BEGIN');
+        try {
+          const result = fn(...args);
+          raw.run('COMMIT');
+          inTransaction = false;
+          persist();
+          return result;
+        } catch (err) {
+          raw.run('ROLLBACK');
+          inTransaction = false;
+          throw err;
+        }
+      };
+    },
+  };
+
+  db.pragma('foreign_keys = ON');
+
+  db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL,
@@ -145,35 +220,38 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 `);
 
-// ---------- Migrations for columns added after the initial release ----------
-function ensureColumn(table, column, definition) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
-  if (!cols.includes(column)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  // ---------- Migrations for columns added after the initial release ----------
+  function ensureColumn(table, column, definition) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+    if (!cols.includes(column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
   }
-}
-ensureColumn('users', 'role', "TEXT NOT NULL DEFAULT 'staff'");
+  ensureColumn('users', 'role', "TEXT NOT NULL DEFAULT 'staff'");
 
-// Seed default user (Melany, owner role) if none exists
-const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
-if (userCount === 0) {
-  const defaultPassword = process.env.VOLPAIA_ADMIN_PASSWORD || 'volpaia2026';
-  const hash = bcrypt.hashSync(defaultPassword, 10);
-  db.prepare('INSERT INTO users (username, password_hash, name, role) VALUES (?, ?, ?, ?)')
-    .run('admin', hash, 'Melany', 'owner');
-  console.log(`[seed] Usuario admin creado. Contraseña inicial: ${defaultPassword}`);
-} else {
-  db.prepare("UPDATE users SET role = 'owner' WHERE username = 'admin' AND role != 'owner'").run();
+  // Seed default user (Melany, owner role) if none exists
+  const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
+  if (userCount === 0) {
+    const defaultPassword = process.env.VOLPAIA_ADMIN_PASSWORD || 'volpaia2026';
+    const hash = bcrypt.hashSync(defaultPassword, 10);
+    db.prepare('INSERT INTO users (username, password_hash, name, role) VALUES (?, ?, ?, ?)')
+      .run('admin', hash, 'Melany', 'owner');
+    console.log(`[seed] Usuario admin creado. Contraseña inicial: ${defaultPassword}`);
+  } else {
+    db.prepare("UPDATE users SET role = 'owner' WHERE username = 'admin' AND role != 'owner'").run();
+  }
+
+  // Seed second user (Darío) if not present yet
+  const dario = db.prepare('SELECT id FROM users WHERE username = ?').get('dario');
+  if (!dario) {
+    const defaultPassword = process.env.VOLPAIA_DARIO_PASSWORD || 'volpaia2026';
+    const hash = bcrypt.hashSync(defaultPassword, 10);
+    db.prepare('INSERT INTO users (username, password_hash, name, role) VALUES (?, ?, ?, ?)')
+      .run('dario', hash, 'Darío', 'staff');
+    console.log(`[seed] Usuario dario creado. Contraseña inicial: ${defaultPassword}`);
+  }
+
+  return db;
 }
 
-// Seed second user (Darío) if not present yet
-const dario = db.prepare('SELECT id FROM users WHERE username = ?').get('dario');
-if (!dario) {
-  const defaultPassword = process.env.VOLPAIA_DARIO_PASSWORD || 'volpaia2026';
-  const hash = bcrypt.hashSync(defaultPassword, 10);
-  db.prepare('INSERT INTO users (username, password_hash, name, role) VALUES (?, ?, ?, ?)')
-    .run('dario', hash, 'Darío', 'staff');
-  console.log(`[seed] Usuario dario creado. Contraseña inicial: ${defaultPassword}`);
-}
-
-module.exports = db;
+module.exports = createDb;

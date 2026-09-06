@@ -1,7 +1,8 @@
 const express = require('express');
-const router = express.Router();
 const bcrypt = require('bcryptjs');
-const db = require('../db');
+
+module.exports = function usersRouterFactory(db) {
+const router = express.Router();
 
 router.get('/', (req, res) => {
   res.json(db.prepare('SELECT id, username, name, role FROM users ORDER BY id ASC').all());
@@ -32,4 +33,5 @@ router.put('/:id', (req, res) => {
   res.json({ id: user.id, username: newUsername, name: newName, role: user.role });
 });
 
-module.exports = router;
+return router;
+};

@@ -1,6 +1,7 @@
 const express = require('express');
+
+module.exports = function settingsRouterFactory(db) {
 const router = express.Router();
-const db = require('../db');
 
 router.get('/', (req, res) => {
   res.json(db.prepare('SELECT * FROM settings WHERE id = 1').get());
@@ -19,4 +20,5 @@ router.put('/', (req, res) => {
   res.json(db.prepare('SELECT * FROM settings WHERE id = 1').get());
 });
 
-module.exports = router;
+return router;
+};

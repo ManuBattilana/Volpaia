@@ -1,6 +1,4 @@
 const express = require('express');
-const router = express.Router();
-const db = require('../db');
 
 const STATUSES = [
   'Pedido recibido',
@@ -24,6 +22,9 @@ const PRESENTATION_FIELD = {
   'Pack x3': { enabled: 'sale_pack3', price: 'price_pack3' },
   Unidad: { enabled: 'sale_unit', price: 'price_unit' },
 };
+
+function ordersRouterFactory(db) {
+const router = express.Router();
 
 function getSettings() {
   return db.prepare('SELECT * FROM settings WHERE id = 1').get();
@@ -298,5 +299,8 @@ router.post('/:id/revert', (req, res) => {
   res.json(serializeOrder(updated));
 });
 
-module.exports = router;
+return router;
+}
+
+module.exports = ordersRouterFactory;
 module.exports.STATUSES = STATUSES;

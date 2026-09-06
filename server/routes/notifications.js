@@ -1,6 +1,7 @@
 const express = require('express');
+
+module.exports = function notificationsRouterFactory(db) {
 const router = express.Router();
-const db = require('../db');
 
 function checkReminders() {
   const settings = db.prepare('SELECT reminder_days_1, reminder_days_2 FROM settings WHERE id = 1').get();
@@ -60,4 +61,5 @@ router.post('/read-all', (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = router;
+return router;
+};
