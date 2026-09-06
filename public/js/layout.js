@@ -21,18 +21,23 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
       <aside class="sidebar">
         <div class="logo-wrap"><span class="brand">VOLPAIA</span></div>
         <nav id="sidebar-nav"></nav>
-        <div class="sidebar-footer">
-          <div class="user-name">Hola, ${escapeHtml(user.name || user.username)}</div>
-          <button class="logout-btn" id="logout-btn">Cerrar sesión</button>
-        </div>
       </aside>
-      <main class="content" id="content">
-        <div class="notif-bell-wrap">
-          <button class="notif-bell" id="notif-bell" title="Notificaciones">${BellIcon}<span class="notif-badge" id="notif-badge" hidden>0</span></button>
-          <div class="notif-dropdown" id="notif-dropdown" hidden></div>
-        </div>
-        <div id="page-content"></div>
-      </main>
+      <div class="main-column">
+        <header class="topbar">
+          <div class="topbar-spacer"></div>
+          <div class="topbar-right">
+            <div class="notif-bell-wrap">
+              <button class="notif-bell" id="notif-bell" title="Notificaciones">${BellIcon}<span class="notif-badge" id="notif-badge" hidden>0</span></button>
+              <div class="notif-dropdown" id="notif-dropdown" hidden></div>
+            </div>
+            <span class="topbar-username">Hola, ${escapeHtml(user.name || user.username)}</span>
+            <button class="logout-btn" id="logout-btn">Cerrar sesión</button>
+          </div>
+        </header>
+        <main class="content" id="content">
+          <div id="page-content"></div>
+        </main>
+      </div>
     </div>
   `;
 
