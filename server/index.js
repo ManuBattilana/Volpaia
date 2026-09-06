@@ -275,11 +275,26 @@ async function start() {
   app.use('/api/contacts', requireAuth, contactsRouterFactory(db));
 
   // ---------- Static frontend ----------
-  app.use(express.static(path.join(__dirname, '..', 'public')));
+  // ASSET_VERSION cambia en cada arranque del servidor (cada deploy reinicia
+  // el proceso), y se inyecta como ?v=... en cada <script>/<link> de
+  // index.html. Así, si Hostinger (u otro hosting) tiene una caché o CDN
+  // delante de los archivos estáticos, el cambio de URL la invalida sola —
+  // sin depender de que el usuario borre caché a mano en su navegador.
+  const ASSET_VERSION = String(Date.now());
+  const publicDir = path.join(__dirname, '..', 'public');
+  const indexPath = path.join(publicDir, 'index.html');
 
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
-  });
+  function sendIndexHtml(req, res) {
+    fs.readFile(indexPath, 'utf8', (err, html) => {
+      if (err) return res.status(500).send('Error interno');
+      res.set('Cache-Control', 'no-cache');
+      res.send(html.replaceAll('__ASSET_VERSION__', ASSET_VERSION));
+    });
+  }
+
+  app.use(express.static(publicDir, { index: false }));
+  app.get('/', sendIndexHtml);
+  app.get('*', sendIndexHtml);
 
   app.listen(PORT, () => {
     console.log(`Volpaia gestión escuchando en http://localhost:${PORT}`);
