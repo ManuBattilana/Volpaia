@@ -27,6 +27,11 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
         <nav id="sidebar-nav"></nav>
       </aside>
       <div class="main-column">
+        <div class="push-banner" id="push-banner" hidden>
+          <span>Activá las notificaciones para recibir avisos de pedidos y mensajes en este celular/PC.</span>
+          <button class="btn btn-secondary" id="push-banner-btn" style="padding:6px 14px;font-size:13px;">Activar notificaciones</button>
+          <button class="push-banner-dismiss" id="push-banner-dismiss" title="Cerrar">×</button>
+        </div>
         <header class="topbar">
           <button class="hamburger-btn" id="hamburger-btn" aria-label="Abrir menú">
             <span></span><span></span><span></span>
@@ -84,9 +89,47 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
   refreshChatBadge();
   notifPollInterval = setInterval(() => { refreshNotifBadge(); refreshChatBadge(); }, 45000);
 
-  if (typeof setupPushNotifications === 'function') setupPushNotifications();
+  setupPushBanner();
 
   return document.getElementById('page-content');
+}
+
+function setupPushBanner() {
+  const banner = document.getElementById('push-banner');
+  if (!banner || typeof pushSupported !== 'function') return;
+
+  if (localStorage.getItem('volpaia_push_dismissed') === '1') {
+    // El usuario ya lo cerró antes; igual intentamos renovar la
+    // suscripción en silencio por si el permiso ya estaba concedido.
+    if (typeof setupPushNotifications === 'function') setupPushNotifications();
+    return;
+  }
+
+  if (!pushSupported() || Notification.permission === 'denied') {
+    if (typeof setupPushNotifications === 'function') setupPushNotifications();
+    return;
+  }
+
+  if (Notification.permission === 'granted') {
+    banner.hidden = true;
+    if (typeof setupPushNotifications === 'function') setupPushNotifications();
+    return;
+  }
+
+  banner.hidden = false;
+  document.getElementById('push-banner-btn').addEventListener('click', async () => {
+    const result = await requestAndSubscribePush();
+    if (result.ok) {
+      banner.hidden = true;
+    } else if (result.reason === 'denied') {
+      alert('Bloqueaste las notificaciones para Volpaia. Para activarlas después, tenés que habilitarlas desde la configuración de notificaciones del navegador/sistema para esta app.');
+      banner.hidden = true;
+    }
+  });
+  document.getElementById('push-banner-dismiss').addEventListener('click', () => {
+    localStorage.setItem('volpaia_push_dismissed', '1');
+    banner.hidden = true;
+  });
 }
 
 // Insignia de mensajes sin leer en el ítem "Chat" del menú — es un contador

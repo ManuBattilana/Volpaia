@@ -1,6 +1,6 @@
 const CommissionsState = { from: '', to: '', paid: '' };
 
-async function renderComisiones(container) {
+async function renderComisiones(container, onOpenOrder) {
   container.innerHTML = `
     <div class="page-header"><h2>Comisiones</h2></div>
     <div class="search-bar">
@@ -46,6 +46,12 @@ async function renderComisiones(container) {
       return;
     }
     listEl.innerHTML = `<div class="list-view">${data.commissions.map(commissionRow).join('')}</div>`;
+    listEl.querySelectorAll('.client-card[data-order-id]').forEach(card => {
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', () => {
+        if (typeof onOpenOrder === 'function') onOpenOrder(Number(card.dataset.orderId));
+      });
+    });
     listEl.querySelectorAll('[data-mark-paid]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -76,7 +82,7 @@ function commissionRow(c) {
   const name = [c.first_name, c.last_name].filter(Boolean).join(' ') || '(Sin nombre)';
   const clientLabel = c.business_name ? `${name} — ${c.business_name}` : name;
   return `
-    <div class="client-card">
+    <div class="client-card" data-order-id="${c.order_id}">
       <div class="client-info">
         <div><span class="client-num">Pedido #${c.order_number}</span><span class="client-name">${escapeHtml(clientLabel)}</span></div>
         <div class="client-location">${escapeHtml(c.created_at.slice(0, 10))} · Base ${formatMoney(c.base_amount)} · ${c.percentage}% = <strong>${formatMoney(c.amount)}</strong></div>

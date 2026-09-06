@@ -33,13 +33,37 @@ function shippingLine(client) {
   if (!client.shipping_type && !client.shipping_carrier) return null;
   const parts = [];
   if (client.shipping_type) parts.push(client.shipping_type);
-  if (client.shipping_carrier) parts.push(client.shipping_carrier);
+  if (client.shipping_carrier) parts.push(`Transporte: ${client.shipping_carrier}`);
   let line = `Envío: ${parts.join(' · ')}`;
   if (client.shipping_address) line += ` — ${client.shipping_address}`;
   return line;
 }
 
+// Recuadro "FACTURA X" como el que usa Damián en sus facturas de papel: no
+// es una factura fiscal, es la leyenda habitual para remitos/comprobantes
+// internos de venta mayorista. Se dibuja arriba a la derecha del título.
+function drawFacturaXBadge(doc) {
+  const boxSize = 26;
+  const boxX = 470;
+  const boxY = 38;
+  doc.save();
+  doc.lineWidth(1.5).strokeColor('#000000').rect(boxX, boxY, boxSize, boxSize).stroke();
+  doc.font('Bold').fontSize(18).fillColor('#000000').text('X', boxX, boxY + 4, { width: boxSize, align: 'center' });
+  doc.font('Bold').fontSize(9).text('FACTURA X', boxX - 25, boxY + boxSize + 4, { width: boxSize + 50, align: 'center' });
+  doc.restore();
+  doc.font('Body');
+}
+
 function drawHeader(doc, title, order, seller) {
+  // La leyenda "Factura X" solo tiene sentido en el comprobante de venta
+  // (el PDF de pedido con precios), no en la lista de preparación interna.
+  // doc.text(str, x, y, ...) con x/y explícitos deja el cursor de flujo
+  // (doc.x/doc.y) posicionado ahí, así que hay que devolverlo al margen
+  // izquierdo o el resto del documento queda arrastrado a esa columna.
+  const topY = doc.y;
+  if (title === 'Pedido') drawFacturaXBadge(doc);
+  doc.x = doc.page.margins.left;
+  doc.y = topY;
   doc.font('Bold').fillColor(PINK_DARK).fontSize(20).text('VOLPAIA', { continued: false });
   doc.fontSize(14).fillColor('#000000').text(title);
   doc.font('Body');
@@ -50,10 +74,16 @@ function drawHeader(doc, title, order, seller) {
 }
 
 function drawClientBlock(doc, client, order) {
-  doc.fillColor('#000000').fontSize(11).text(`Cliente: ${clientLabel(client)}`);
+  const name = [client.first_name, client.last_name].filter(Boolean).join(' ');
+  doc.fillColor('#000000').fontSize(11);
+  if (name) doc.text(`Cliente: ${name}`);
+  if (client.business_name) doc.text(`Emprendimiento: ${client.business_name}`);
   doc.fontSize(10).fillColor(TEXT_MUTED);
+  if (client.fiscal_name) doc.text(`Razón social: ${client.fiscal_name}`);
+  if (client.fiscal_id) doc.text(`DNI/CUIT: ${client.fiscal_id}`);
   if (client.phone) doc.text(`Tel: ${client.phone}`);
-  const addressParts = [client.address, client.locality, client.province].filter(Boolean);
+  if (client.email) doc.text(`Email: ${client.email}`);
+  const addressParts = [client.address, client.locality, client.postal_code ? `CP ${client.postal_code}` : null, client.province].filter(Boolean);
   if (addressParts.length) doc.text(`Dirección: ${addressParts.join(', ')}`);
   // El envío del pedido puede haberse corregido puntualmente; si no, se usa
   // el habitual del cliente.

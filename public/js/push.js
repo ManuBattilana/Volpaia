@@ -16,29 +16,51 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
 }
 
-async function setupPushNotifications() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-  if (window.__volpaiaPushSetupDone) return;
-  window.__volpaiaPushSetupDone = true;
+function pushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && typeof Notification !== 'undefined';
+}
 
+// Se separa en dos pasos porque varios navegadores (Chrome incluido) ignoran
+// o bloquean en silencio un Notification.requestPermission() que no venga
+// disparado directamente por un click del usuario. Por eso:
+// - subscribeIfAlreadyGranted() se puede llamar sola (sin gesto) al entrar
+//   a la app, para renovar la suscripción si el permiso ya estaba dado.
+// - requestAndSubscribe() se llama desde el click del botón "Activar
+//   notificaciones" cuando el permiso todavía no se pidió.
+async function subscribeToPush(reg) {
+  let subscription = await reg.pushManager.getSubscription();
+  if (!subscription) {
+    const { publicKey } = await Api.get('/api/push/vapid-public-key');
+    subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+  }
+  await Api.post('/api/push/subscribe', subscription.toJSON());
+}
+
+async function setupPushNotifications() {
+  if (!pushSupported()) return;
   try {
     const reg = await navigator.serviceWorker.register('/sw.js');
-    if (Notification.permission === 'denied') return;
-
-    let subscription = await reg.pushManager.getSubscription();
-    if (!subscription) {
-      if (Notification.permission !== 'granted') {
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') return;
-      }
-      const { publicKey } = await Api.get('/api/push/vapid-public-key');
-      subscription = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
+    if (Notification.permission === 'granted') {
+      await subscribeToPush(reg);
     }
-    await Api.post('/api/push/subscribe', subscription.toJSON());
+  } catch (err) {
+    console.warn('No se pudo verificar la suscripción push:', err);
+  }
+}
+
+async function requestAndSubscribePush() {
+  if (!pushSupported()) return { ok: false, reason: 'unsupported' };
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return { ok: false, reason: permission };
+    await subscribeToPush(reg);
+    return { ok: true };
   } catch (err) {
     console.warn('No se pudo activar la notificación push:', err);
+    return { ok: false, reason: 'error' };
   }
 }

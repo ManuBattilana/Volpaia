@@ -76,8 +76,10 @@ function getItems(orderId) {
 
 function getClient(clientId) {
   return db.prepare(`
-    SELECT id, first_name, last_name, business_name, client_number, phone,
-           address, locality, province, shipping_type, shipping_carrier, shipping_address
+    SELECT id, first_name, last_name, business_name, client_number, phone, email,
+           fiscal_name, fiscal_id,
+           address, locality, postal_code, province,
+           shipping_type, shipping_carrier, shipping_address
     FROM clients WHERE id = ?
   `).get(clientId);
 }

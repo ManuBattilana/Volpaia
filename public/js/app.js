@@ -27,7 +27,30 @@ async function handleLogout() {
   renderLogin((user) => { Nav.user = user; showApp(); });
 }
 
+// Cada búsqueda vive en un objeto de estado a nivel de módulo (State,
+// ProdState, OrdersState, ContactsState) que sobrevive entre renders para
+// no perder el filtro al ir de la lista a un detalle y volver. Pero al
+// cambiar de sección (ej. Pedidos -> Comisiones) el usuario espera
+// encontrar la búsqueda vacía la próxima vez que entre a Pedidos, así que
+// se limpia solo cuando el módulo realmente cambia.
+const PAGE_MODULE = {
+  clientes: 'clientes', 'cliente-detalle': 'clientes',
+  productos: 'productos', 'productos-lista': 'productos', 'producto-detalle': 'productos',
+  pedidos: 'pedidos', 'pedido-nuevo': 'pedidos', 'pedido-detalle': 'pedidos',
+  contactos: 'contactos', 'contacto-detalle': 'contactos',
+};
+
+function resetModuleSearch(moduleKey) {
+  if (moduleKey === 'clientes' && typeof State !== 'undefined') State.search = '';
+  if (moduleKey === 'productos' && typeof ProdState !== 'undefined') { ProdState.search = ''; ProdState.globalSearch = ''; }
+  if (moduleKey === 'pedidos' && typeof OrdersState !== 'undefined') OrdersState.search = '';
+  if (moduleKey === 'contactos' && typeof ContactsState !== 'undefined') ContactsState.search = '';
+}
+
 function navigateTo(page, params) {
+  const prevModule = PAGE_MODULE[Nav.route.page];
+  const nextModule = PAGE_MODULE[page];
+  if (prevModule && prevModule !== nextModule) resetModuleSearch(prevModule);
   Nav.route = { page, ...(params || {}) };
   draw();
 }
@@ -102,7 +125,7 @@ function draw() {
       (clientId) => navigateTo('cliente-detalle', { id: clientId })
     );
   } else if (page === 'comisiones') {
-    renderComisiones(content);
+    renderComisiones(content, (orderId) => navigateTo('pedido-detalle', { id: orderId }));
   } else if (page === 'chat') {
     renderChat(content, Nav.user);
   }
