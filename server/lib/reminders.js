@@ -1,3 +1,5 @@
+const { sendPush } = require('./push');
+
 function checkReminders(db) {
   const settings = db.prepare('SELECT reminder_days_1, reminder_days_2 FROM settings WHERE id = 1').get();
   const orders = db.prepare(`
@@ -19,8 +21,10 @@ function checkReminders(db) {
       due1.setDate(due1.getDate() + days1);
       if (today >= due1) {
         db.prepare('UPDATE orders SET reminder_1_done = 1 WHERE id = ?').run(order.id);
+        const message = `Recordatorio: consultarle al cliente del pedido #${order.order_number} si le llegó bien el paquete`;
         db.prepare('INSERT INTO notifications (user_id, type, order_id, message) VALUES (NULL, ?, ?, ?)')
-          .run('reminder', order.id, `Recordatorio: consultarle al cliente del pedido #${order.order_number} si le llegó bien el paquete`);
+          .run('reminder', order.id, message);
+        sendPush(db, null, { title: 'Volpaia', body: message, url: `/#pedido/${order.id}` });
       }
     }
     if (!order.reminder_2_done) {
@@ -28,8 +32,10 @@ function checkReminders(db) {
       due2.setDate(due2.getDate() + days2);
       if (today >= due2) {
         db.prepare('UPDATE orders SET reminder_2_done = 1 WHERE id = ?').run(order.id);
+        const message = `Recordatorio: consultarle al cliente del pedido #${order.order_number} si quiere hacer otro pedido`;
         db.prepare('INSERT INTO notifications (user_id, type, order_id, message) VALUES (NULL, ?, ?, ?)')
-          .run('reminder', order.id, `Recordatorio: consultarle al cliente del pedido #${order.order_number} si quiere hacer otro pedido`);
+          .run('reminder', order.id, message);
+        sendPush(db, null, { title: 'Volpaia', body: message, url: `/#pedido/${order.id}` });
       }
     }
   }

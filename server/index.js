@@ -12,6 +12,10 @@ const usersRouterFactory = require('./routes/users');
 const contactsRouterFactory = require('./routes/contacts');
 const commissionsRouterFactory = require('./routes/commissions');
 const dashboardRouterFactory = require('./routes/dashboard');
+const messagesRouterFactory = require('./routes/messages');
+const pushRouterFactory = require('./routes/push');
+const { checkReminders } = require('./lib/reminders');
+const { ensureVapidKeys } = require('./lib/push');
 
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'volpaia-dev-secret-change-me';
@@ -24,6 +28,7 @@ if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 async function start() {
   const db = await createDb();
+  ensureVapidKeys(db);
   const app = express();
 
   app.use(express.json({ limit: '10mb' }));
@@ -277,6 +282,8 @@ async function start() {
   app.use('/api/contacts', requireAuth, contactsRouterFactory(db));
   app.use('/api/commissions', requireAuth, commissionsRouterFactory(db));
   app.use('/api/dashboard', requireAuth, dashboardRouterFactory(db));
+  app.use('/api/messages', requireAuth, messagesRouterFactory(db));
+  app.use('/api/push', requireAuth, pushRouterFactory(db));
 
   // ---------- Static frontend ----------
   // ASSET_VERSION cambia en cada arranque del servidor (cada deploy reinicia
@@ -303,6 +310,14 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`Volpaia gestión escuchando en http://localhost:${PORT}`);
   });
+
+  // Antes, los recordatorios solo se generaban cuando alguien abría la app
+  // (al pedir /api/notifications). Para que la notificación push llegue al
+  // celular/PC incluso con la app cerrada, hay que revisarlos también en
+  // segundo plano cada cierto tiempo.
+  setInterval(() => {
+    try { checkReminders(db); } catch (err) { console.error('Error chequeando recordatorios:', err); }
+  }, 5 * 60 * 1000);
 }
 
 start().catch(err => {

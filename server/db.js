@@ -247,6 +247,24 @@ CREATE TABLE IF NOT EXISTS notifications (
   read INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sender_id INTEGER NOT NULL REFERENCES users(id),
+  recipient_id INTEGER REFERENCES users(id),
+  body TEXT NOT NULL,
+  read INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  endpoint TEXT UNIQUE NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 `);
 
   // ---------- Migrations for columns added after the initial release ----------
@@ -274,6 +292,11 @@ CREATE TABLE IF NOT EXISTS notifications (
   // pedido, pero se puede corregir puntualmente para ese pedido en particular.
   ensureColumn('orders', 'shipping_type', 'TEXT');
   ensureColumn('orders', 'shipping_carrier', 'TEXT');
+  // Claves VAPID para notificaciones push: se generan una sola vez (ver
+  // server/lib/push.js) y quedan guardadas para no invalidar las
+  // suscripciones ya hechas por los navegadores en cada reinicio.
+  ensureColumn('settings', 'vapid_public_key', 'TEXT');
+  ensureColumn('settings', 'vapid_private_key', 'TEXT');
   // Cualquier pedido que haya quedado del flujo viejo de 11 pasos (todos de
   // prueba) se lleva al principio del flujo nuevo para no dejarlo en un
   // índice de estado que ya no existe.

@@ -5,6 +5,7 @@ const MENU_ITEMS = [
   { key: 'productos', label: 'Productos', enabled: true },
   { key: 'pedidos', label: 'Pedidos', enabled: true },
   { key: 'comisiones', label: 'Comisiones', enabled: true },
+  { key: 'chat', label: 'Chat', enabled: true },
   { key: 'configuracion', label: 'Configuración', enabled: true },
 ];
 
@@ -15,6 +16,7 @@ let notifPollInterval = null;
 
 function renderLayout(user, activeKey, onNavigate, onLogout) {
   if (notifPollInterval) { clearInterval(notifPollInterval); notifPollInterval = null; }
+  if (typeof chatPollInterval !== 'undefined' && chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
 
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -67,7 +69,7 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
   MENU_ITEMS.forEach(item => {
     const btn = document.createElement('button');
     btn.className = 'nav-item' + (item.key === activeKey ? ' active' : '') + (!item.enabled ? ' disabled' : '');
-    btn.textContent = item.label;
+    btn.innerHTML = escapeHtml(item.label) + (item.key === 'chat' ? '<span class="nav-badge" id="chat-nav-badge" hidden>0</span>' : '');
     if (item.enabled) {
       btn.addEventListener('click', () => { closeDrawer(); onNavigate(item.key); });
     } else {
@@ -79,9 +81,28 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
   document.getElementById('logout-btn').addEventListener('click', onLogout);
 
   setupNotificationBell();
-  notifPollInterval = setInterval(refreshNotifBadge, 45000);
+  refreshChatBadge();
+  notifPollInterval = setInterval(() => { refreshNotifBadge(); refreshChatBadge(); }, 45000);
+
+  if (typeof setupPushNotifications === 'function') setupPushNotifications();
 
   return document.getElementById('page-content');
+}
+
+// Insignia de mensajes sin leer en el ítem "Chat" del menú — es un contador
+// aparte del de la campanita, ninguno de los dos alimenta al otro.
+async function refreshChatBadge() {
+  const badge = document.getElementById('chat-nav-badge');
+  if (!badge) return;
+  try {
+    const { count } = await Api.get('/api/messages/unread-count');
+    if (count > 0) {
+      badge.hidden = false;
+      badge.textContent = count > 9 ? '9+' : String(count);
+    } else {
+      badge.hidden = true;
+    }
+  } catch (e) { /* sesión pudo haber expirado */ }
 }
 
 async function setupNotificationBell() {

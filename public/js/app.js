@@ -103,6 +103,8 @@ function draw() {
     );
   } else if (page === 'comisiones') {
     renderComisiones(content);
+  } else if (page === 'chat') {
+    renderChat(content, Nav.user);
   }
 }
 
