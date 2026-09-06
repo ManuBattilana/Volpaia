@@ -268,6 +268,8 @@ CREATE TABLE IF NOT EXISTS notifications (
   ensureColumn('orders', 'invoice_attachment_url', 'TEXT');
   ensureColumn('orders', 'transfer_attachment_url', 'TEXT');
   ensureColumn('orders', 'payment_attachment_url', 'TEXT');
+  ensureColumn('commissions', 'paid', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('commissions', 'paid_at', 'TEXT');
   // Cualquier pedido que haya quedado del flujo viejo de 11 pasos (todos de
   // prueba) se lleva al principio del flujo nuevo para no dejarlo en un
   // índice de estado que ya no existe.

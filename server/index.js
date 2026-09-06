@@ -10,6 +10,8 @@ const notificationsRouterFactory = require('./routes/notifications');
 const settingsRouterFactory = require('./routes/settings');
 const usersRouterFactory = require('./routes/users');
 const contactsRouterFactory = require('./routes/contacts');
+const commissionsRouterFactory = require('./routes/commissions');
+const dashboardRouterFactory = require('./routes/dashboard');
 
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'volpaia-dev-secret-change-me';
@@ -273,6 +275,8 @@ async function start() {
   app.use('/api/settings', requireAuth, settingsRouterFactory(db));
   app.use('/api/users', requireAuth, usersRouterFactory(db));
   app.use('/api/contacts', requireAuth, contactsRouterFactory(db));
+  app.use('/api/commissions', requireAuth, commissionsRouterFactory(db));
+  app.use('/api/dashboard', requireAuth, dashboardRouterFactory(db));
 
   // ---------- Static frontend ----------
   // ASSET_VERSION cambia en cada arranque del servidor (cada deploy reinicia

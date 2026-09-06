@@ -73,7 +73,8 @@ function draw() {
     renderPedidosList(
       content,
       (id) => navigateTo('pedido-detalle', { id }),
-      () => navigateTo('pedido-nuevo')
+      () => navigateTo('pedido-nuevo'),
+      Nav.route.statusFilter
     );
   } else if (page === 'pedido-nuevo') {
     renderPedidoForm(
@@ -100,6 +101,8 @@ function draw() {
       () => navigateTo('contactos'),
       (clientId) => navigateTo('cliente-detalle', { id: clientId })
     );
+  } else if (page === 'comisiones') {
+    renderComisiones(content);
   }
 }
 

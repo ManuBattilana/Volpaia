@@ -4,7 +4,7 @@ const MENU_ITEMS = [
   { key: 'clientes', label: 'Clientes', enabled: true },
   { key: 'productos', label: 'Productos', enabled: true },
   { key: 'pedidos', label: 'Pedidos', enabled: true },
-  { key: 'comisiones', label: 'Comisiones', enabled: false },
+  { key: 'comisiones', label: 'Comisiones', enabled: true },
   { key: 'configuracion', label: 'Configuración', enabled: true },
 ];
 

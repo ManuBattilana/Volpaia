@@ -287,6 +287,21 @@ a { color: var(--pink-dark); }
 .dash-card:hover { transform: translateY(-3px); border-color: var(--pink-dark); }
 .dash-card h3 { margin: 0; color: var(--pink-dark); font-size: 18px; }
 .dash-card p { margin: 0; color: var(--text-muted); font-size: 13px; }
+.widget-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  background: var(--pink-light);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  color: var(--text);
+  text-align: left;
+}
+.widget-row:hover { background: var(--border); }
+
 .dash-card.disabled {
   opacity: 0.55;
   cursor: default;

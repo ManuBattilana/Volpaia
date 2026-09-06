@@ -24,7 +24,10 @@ function allowedPresentations(product) {
 
 const OrdersState = { statusFilter: '', search: '' };
 
-async function renderPedidosList(container, onOpen, onNew) {
+async function renderPedidosList(container, onOpen, onNew, presetStatusFilter) {
+  if (presetStatusFilter !== undefined && presetStatusFilter !== null) {
+    OrdersState.statusFilter = presetStatusFilter;
+  }
   container.innerHTML = `
     <div class="page-header">
       <h2>Pedidos</h2>
