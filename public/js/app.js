@@ -69,6 +69,27 @@ function draw() {
       () => navigateTo('productos-lista', { category: Nav.route.category || 'Todas' }),
       () => navigateTo('productos-lista', { category: Nav.route.category || 'Todas' })
     );
+  } else if (page === 'pedidos') {
+    renderPedidosList(
+      content,
+      (id) => navigateTo('pedido-detalle', { id }),
+      () => navigateTo('pedido-nuevo')
+    );
+  } else if (page === 'pedido-nuevo') {
+    renderPedidoForm(
+      content,
+      () => navigateTo('pedidos'),
+      (id) => navigateTo('pedido-detalle', { id })
+    );
+  } else if (page === 'pedido-detalle') {
+    renderPedidoDetail(
+      content,
+      Nav.route.id,
+      Nav.user,
+      () => navigateTo('pedidos')
+    );
+  } else if (page === 'configuracion') {
+    renderConfiguracion(content, Nav.user);
   }
 }
 

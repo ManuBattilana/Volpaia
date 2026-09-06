@@ -5,6 +5,10 @@ const cookieSession = require('cookie-session');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const db = require('./db');
+const ordersRouter = require('./routes/orders');
+const notificationsRouter = require('./routes/notifications');
+const settingsRouter = require('./routes/settings');
+const usersRouter = require('./routes/users');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +32,13 @@ function requireAuth(req, res, next) {
   return res.status(401).json({ error: 'No autenticado' });
 }
 
+app.use((req, res, next) => {
+  if (req.session && req.session.userId) {
+    req.currentUser = db.prepare('SELECT id, username, name, role FROM users WHERE id = ?').get(req.session.userId);
+  }
+  next();
+});
+
 // ---------- Auth routes ----------
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
@@ -47,7 +58,7 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/me', (req, res) => {
   if (!req.session || !req.session.userId) return res.status(401).json({ error: 'No autenticado' });
-  const user = db.prepare('SELECT id, username, name FROM users WHERE id = ?').get(req.session.userId);
+  const user = db.prepare('SELECT id, username, name, role FROM users WHERE id = ?').get(req.session.userId);
   if (!user) return res.status(401).json({ error: 'No autenticado' });
   res.json({ user });
 });
@@ -57,7 +68,8 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const safeExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext) ? ext : '.jpg';
+    const allowedExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf'];
+    const safeExt = allowedExt.includes(ext) ? ext : '.jpg';
     cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
   }
 });
@@ -65,8 +77,8 @@ const upload = multer({
   storage,
   limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
-    else cb(new Error('Formato de imagen no soportado'));
+    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype) || file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('Formato de archivo no soportado'));
   }
 });
 
@@ -247,6 +259,12 @@ app.delete('/api/products/:id', (req, res) => {
   db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
+
+// ---------- Orders / Notifications / Settings / Users API ----------
+app.use('/api/orders', requireAuth, ordersRouter);
+app.use('/api/notifications', requireAuth, notificationsRouter);
+app.use('/api/settings', requireAuth, settingsRouter);
+app.use('/api/users', requireAuth, usersRouter);
 
 // ---------- Static frontend ----------
 app.use(express.static(path.join(__dirname, '..', 'public')));

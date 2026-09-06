@@ -3,11 +3,18 @@ const MENU_ITEMS = [
   { key: 'contactos', label: 'Contactos', enabled: false },
   { key: 'clientes', label: 'Clientes', enabled: true },
   { key: 'productos', label: 'Productos', enabled: true },
-  { key: 'pedidos', label: 'Pedidos', enabled: false },
+  { key: 'pedidos', label: 'Pedidos', enabled: true },
   { key: 'comisiones', label: 'Comisiones', enabled: false },
+  { key: 'configuracion', label: 'Configuración', enabled: true },
 ];
 
+const BellIcon = `<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>`;
+
+let notifPollInterval = null;
+
 function renderLayout(user, activeKey, onNavigate, onLogout) {
+  if (notifPollInterval) { clearInterval(notifPollInterval); notifPollInterval = null; }
+
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="layout">
@@ -19,7 +26,13 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
           <button class="logout-btn" id="logout-btn">Cerrar sesión</button>
         </div>
       </aside>
-      <main class="content" id="content"></main>
+      <main class="content" id="content">
+        <div class="notif-bell-wrap">
+          <button class="notif-bell" id="notif-bell" title="Notificaciones">${BellIcon}<span class="notif-badge" id="notif-badge" hidden>0</span></button>
+          <div class="notif-dropdown" id="notif-dropdown" hidden></div>
+        </div>
+        <div id="page-content"></div>
+      </main>
     </div>
   `;
 
@@ -38,7 +51,77 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
 
   document.getElementById('logout-btn').addEventListener('click', onLogout);
 
-  return document.getElementById('content');
+  setupNotificationBell();
+  notifPollInterval = setInterval(refreshNotifBadge, 45000);
+
+  return document.getElementById('page-content');
+}
+
+async function setupNotificationBell() {
+  const bellBtn = document.getElementById('notif-bell');
+  const dropdown = document.getElementById('notif-dropdown');
+
+  bellBtn.addEventListener('click', async () => {
+    const isOpen = !dropdown.hidden;
+    if (isOpen) { dropdown.hidden = true; return; }
+    await drawNotifDropdown();
+    dropdown.hidden = false;
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!dropdown.hidden && !e.target.closest('.notif-bell-wrap')) dropdown.hidden = true;
+  });
+
+  await refreshNotifBadge();
+}
+
+async function refreshNotifBadge() {
+  const badge = document.getElementById('notif-badge');
+  if (!badge) return;
+  try {
+    const notifs = await Api.get('/api/notifications');
+    if (notifs.length > 0) {
+      badge.hidden = false;
+      badge.textContent = notifs.length > 9 ? '9+' : String(notifs.length);
+    } else {
+      badge.hidden = true;
+    }
+  } catch (e) { /* sesión pudo haber expirado, se maneja en próxima navegación */ }
+}
+
+async function drawNotifDropdown() {
+  const dropdown = document.getElementById('notif-dropdown');
+  const notifs = await Api.get('/api/notifications');
+  if (notifs.length === 0) {
+    dropdown.innerHTML = `<div class="empty-state" style="padding:20px;">No tenés notificaciones nuevas.</div>`;
+    return;
+  }
+  dropdown.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);">
+      <strong style="font-size:13px;color:var(--pink-dark);">Notificaciones</strong>
+      <button id="notif-read-all" style="background:none;border:none;color:var(--cyan);font-size:12px;font-weight:600;">Marcar todas leídas</button>
+    </div>
+    <div style="max-height:320px;overflow-y:auto;">
+      ${notifs.map(n => `
+        <div class="notif-item" data-id="${n.id}">
+          <div>${escapeHtml(n.message)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">${escapeHtml(n.created_at)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  dropdown.querySelector('#notif-read-all').addEventListener('click', async () => {
+    await Api.post('/api/notifications/read-all');
+    await refreshNotifBadge();
+    dropdown.hidden = true;
+  });
+  dropdown.querySelectorAll('.notif-item').forEach(el => {
+    el.addEventListener('click', async () => {
+      await Api.post(`/api/notifications/${el.dataset.id}/read`);
+      el.remove();
+      await refreshNotifBadge();
+    });
+  });
 }
 
 function confirmModal({ title, message, confirmLabel = 'Eliminar', onConfirm }) {

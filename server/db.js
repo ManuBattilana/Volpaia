@@ -75,16 +75,105 @@ CREATE TABLE IF NOT EXISTS products (
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  reminder_days_1 INTEGER NOT NULL DEFAULT 4,
+  reminder_days_2 INTEGER NOT NULL DEFAULT 15,
+  commission_percentage REAL NOT NULL DEFAULT 5
+);
+INSERT OR IGNORE INTO settings (id, reminder_days_1, reminder_days_2, commission_percentage) VALUES (1, 4, 15, 5);
+
+CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_number INTEGER UNIQUE NOT NULL,
+  client_id INTEGER NOT NULL REFERENCES clients(id),
+  status_index INTEGER NOT NULL DEFAULT 0,
+  notes TEXT,
+  amount_invoice REAL,
+  amount_payment REAL,
+  shipping_date TEXT,
+  tracking_number TEXT,
+  shipping_proof_photo TEXT,
+  reminder_days_1 INTEGER,
+  reminder_days_2 INTEGER,
+  reminder_1_done INTEGER DEFAULT 0,
+  reminder_2_done INTEGER DEFAULT 0,
+  created_by INTEGER,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO counters (name, value) VALUES ('order_number', 0);
+
+CREATE TABLE IF NOT EXISTS order_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  quantity REAL NOT NULL,
+  presentation TEXT NOT NULL,
+  unit_price REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS order_status_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  from_status INTEGER,
+  to_status INTEGER NOT NULL,
+  changed_by INTEGER,
+  is_correction INTEGER DEFAULT 0,
+  attachment_url TEXT,
+  changed_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS commissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER UNIQUE NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  base_amount REAL NOT NULL,
+  percentage REAL NOT NULL,
+  amount REAL NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  type TEXT NOT NULL,
+  order_id INTEGER,
+  message TEXT NOT NULL,
+  read INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 `);
 
-// Seed default user if none exists
+// ---------- Migrations for columns added after the initial release ----------
+function ensureColumn(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+  if (!cols.includes(column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+ensureColumn('users', 'role', "TEXT NOT NULL DEFAULT 'staff'");
+
+// Seed default user (Melany, owner role) if none exists
 const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
 if (userCount === 0) {
   const defaultPassword = process.env.VOLPAIA_ADMIN_PASSWORD || 'volpaia2026';
   const hash = bcrypt.hashSync(defaultPassword, 10);
-  db.prepare('INSERT INTO users (username, password_hash, name) VALUES (?, ?, ?)')
-    .run('admin', hash, 'Melany');
+  db.prepare('INSERT INTO users (username, password_hash, name, role) VALUES (?, ?, ?, ?)')
+    .run('admin', hash, 'Melany', 'owner');
   console.log(`[seed] Usuario admin creado. Contraseña inicial: ${defaultPassword}`);
+} else {
+  db.prepare("UPDATE users SET role = 'owner' WHERE username = 'admin' AND role != 'owner'").run();
+}
+
+// Seed second user (Darío) if not present yet
+const dario = db.prepare('SELECT id FROM users WHERE username = ?').get('dario');
+if (!dario) {
+  const defaultPassword = process.env.VOLPAIA_DARIO_PASSWORD || 'volpaia2026';
+  const hash = bcrypt.hashSync(defaultPassword, 10);
+  db.prepare('INSERT INTO users (username, password_hash, name, role) VALUES (?, ?, ?, ?)')
+    .run('dario', hash, 'Darío', 'staff');
+  console.log(`[seed] Usuario dario creado. Contraseña inicial: ${defaultPassword}`);
 }
 
 module.exports = db;
