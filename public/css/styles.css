@@ -813,6 +813,28 @@ a { color: var(--pink-dark); }
   .push-banner { flex-wrap: wrap; }
 }
 
+/* ---------- Archivos adjuntos del pedido ---------- */
+.attachments-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--pink-light);
+  color: var(--pink-dark);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.attachment-chip:hover { background: var(--white); border-color: var(--pink-dark); }
+.attachment-chip svg { flex-shrink: 0; }
+
 /* ---------- Chat interno ---------- */
 .chat-box {
   display: flex;

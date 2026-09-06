@@ -22,6 +22,32 @@ function allowedPresentations(product) {
   return PRESENTATIONS.filter(p => !!product[p.enabledField]);
 }
 
+const PdfFileIcon = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+const ImageFileIcon = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`;
+
+function isPdfUrl(url) { return /\.pdf(\?|$)/i.test(url || ''); }
+
+// Junta en un solo lugar todos los comprobantes que se van adjuntando a lo
+// largo del flujo del pedido (Factura X, transferencia, pago, foto de
+// envío), para que se puedan ver siempre desde la sección "Archivos" sin
+// depender de en qué paso está el pedido ahora mismo — antes cada adjunto
+// solo se mostraba mientras el pedido estaba en el paso en el que se había
+// cargado, y después quedaba invisible para todos.
+function orderAttachments(order) {
+  const list = [
+    { label: 'Factura X', url: order.invoice_attachment_url },
+    { label: 'Datos de transferencia', url: order.transfer_attachment_url },
+    { label: 'Comprobante de pago', url: order.payment_attachment_url },
+    { label: 'Foto/comprobante de envío', url: order.shipping_proof_photo },
+  ];
+  return list.filter(a => a.url).map(a => ({ ...a, isPdf: isPdfUrl(a.url) }));
+}
+
+function openAttachment(url, label) {
+  if (isPdfUrl(url)) openPdfPreview(url, `${label}.pdf`);
+  else window.open(url, '_blank');
+}
+
 const OrdersState = { statusFilter: '', search: '' };
 
 async function renderPedidosList(container, onOpen, onNew, presetStatusFilter) {
@@ -351,6 +377,20 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         </div>
       ` : ''}
 
+      ${orderAttachments(order).length ? `
+        <div class="detail-section">
+          <h3>Archivos</h3>
+          <div class="attachments-grid">
+            ${orderAttachments(order).map(a => `
+              <button class="attachment-chip" data-url="${a.url}" data-label="${escapeHtml(a.label)}">
+                ${a.isPdf ? PdfFileIcon : ImageFileIcon}
+                <span>${escapeHtml(a.label)}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       <div class="detail-section">
         <h3>Productos</h3>
         <table style="width:100%;border-collapse:collapse;" class="items-table-responsive">
@@ -417,6 +457,10 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
     `;
 
     document.getElementById('btn-back').addEventListener('click', onBack);
+
+    container.querySelectorAll('.attachment-chip').forEach(btn => {
+      btn.addEventListener('click', () => openAttachment(btn.dataset.url, btn.dataset.label));
+    });
 
     const viewOrderPdfBtn = document.getElementById('btn-view-order-pdf');
     if (viewOrderPdfBtn) viewOrderPdfBtn.addEventListener('click', () => openPdfPreview(order.order_pdf_path, `pedido-${order.order_number}.pdf`));

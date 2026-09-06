@@ -13,10 +13,12 @@ const BellIcon = `<svg viewBox="0 0 24 24" width="20" height="20"><path fill="cu
 const LogoutIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 
 let notifPollInterval = null;
+let currentOnNavigate = null;
 
 function renderLayout(user, activeKey, onNavigate, onLogout) {
   if (notifPollInterval) { clearInterval(notifPollInterval); notifPollInterval = null; }
   if (typeof chatPollInterval !== 'undefined' && chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; }
+  currentOnNavigate = onNavigate;
 
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -98,20 +100,28 @@ function setupPushBanner() {
   const banner = document.getElementById('push-banner');
   if (!banner || typeof pushSupported !== 'function') return;
 
-  if (localStorage.getItem('volpaia_push_dismissed') === '1') {
-    // El usuario ya lo cerró antes; igual intentamos renovar la
-    // suscripción en silencio por si el permiso ya estaba concedido.
+  // "volpaia_push_active" es la fuente de verdad principal: se guarda en
+  // cuanto la suscripción se hizo con éxito una vez, así el banner no
+  // vuelve a aparecer aunque la lectura de Notification.permission tenga
+  // alguna demora/inconsistencia puntual del navegador en la próxima carga.
+  const alreadyActive = localStorage.getItem('volpaia_push_active') === '1';
+  const dismissed = localStorage.getItem('volpaia_push_dismissed') === '1';
+
+  if (alreadyActive || dismissed) {
+    banner.hidden = true;
     if (typeof setupPushNotifications === 'function') setupPushNotifications();
     return;
   }
 
   if (!pushSupported() || Notification.permission === 'denied') {
+    banner.hidden = true;
     if (typeof setupPushNotifications === 'function') setupPushNotifications();
     return;
   }
 
   if (Notification.permission === 'granted') {
     banner.hidden = true;
+    localStorage.setItem('volpaia_push_active', '1');
     if (typeof setupPushNotifications === 'function') setupPushNotifications();
     return;
   }
@@ -120,10 +130,14 @@ function setupPushBanner() {
   document.getElementById('push-banner-btn').addEventListener('click', async () => {
     const result = await requestAndSubscribePush();
     if (result.ok) {
+      localStorage.setItem('volpaia_push_active', '1');
       banner.hidden = true;
     } else if (result.reason === 'denied') {
       alert('Bloqueaste las notificaciones para Volpaia. Para activarlas después, tenés que habilitarlas desde la configuración de notificaciones del navegador/sistema para esta app.');
+      localStorage.setItem('volpaia_push_dismissed', '1');
       banner.hidden = true;
+    } else {
+      alert('No se pudo activar la notificación push. Probá de nuevo en unos segundos; si persiste, puede que este navegador/dispositivo no lo soporte todavía.');
     }
   });
   document.getElementById('push-banner-dismiss').addEventListener('click', () => {
@@ -194,9 +208,9 @@ async function drawNotifDropdown() {
     </div>
     <div style="max-height:320px;overflow-y:auto;">
       ${notifs.map(n => `
-        <div class="notif-item" data-id="${n.id}">
+        <div class="notif-item" data-id="${n.id}" data-order-id="${n.order_id || ''}" ${n.order_id ? 'style="cursor:pointer;"' : ''}>
           <div>${escapeHtml(n.message)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">${escapeHtml(n.created_at)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">${escapeHtml(n.created_at)}${n.order_id ? ' · Ver pedido →' : ''}</div>
         </div>
       `).join('')}
     </div>
@@ -209,8 +223,14 @@ async function drawNotifDropdown() {
   dropdown.querySelectorAll('.notif-item').forEach(el => {
     el.addEventListener('click', async () => {
       await Api.post(`/api/notifications/${el.dataset.id}/read`);
-      el.remove();
+      const orderId = el.dataset.orderId;
+      dropdown.hidden = true;
       await refreshNotifBadge();
+      if (orderId && typeof currentOnNavigate === 'function') {
+        currentOnNavigate('pedido-detalle', { id: Number(orderId) });
+      } else {
+        el.remove();
+      }
     });
   });
 }
