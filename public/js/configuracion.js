@@ -30,7 +30,7 @@ async function renderConfiguracion(container, currentUser) {
     <div class="detail-section">
       <h3>Usuarios</h3>
       <div style="display:flex;flex-direction:column;gap:20px;">
-        ${users.map(u => userForm(u)).join('')}
+        ${users.map(u => u.id === currentUser.id ? userForm(u) : userReadOnly(u)).join('')}
       </div>
     </div>
   `;
@@ -51,33 +51,33 @@ async function renderConfiguracion(container, currentUser) {
     }
   });
 
-  users.forEach(u => {
-    const form = document.getElementById(`user-form-${u.id}`);
-    form.querySelector('.btn-save-user').addEventListener('click', async () => {
-      const msgEl = form.querySelector('.user-msg');
+  const ownForm = document.getElementById(`user-form-${currentUser.id}`);
+  if (ownForm) {
+    ownForm.querySelector('.btn-save-user').addEventListener('click', async () => {
+      const msgEl = ownForm.querySelector('.user-msg');
       const payload = {
-        username: form.querySelector('[data-field="username"]').value,
-        name: form.querySelector('[data-field="name"]').value,
+        username: ownForm.querySelector('[data-field="username"]').value,
+        name: ownForm.querySelector('[data-field="name"]').value,
       };
-      const password = form.querySelector('[data-field="password"]').value;
+      const password = ownForm.querySelector('[data-field="password"]').value;
       if (password) payload.password = password;
       try {
-        await Api.put(`/api/users/${u.id}`, payload);
+        await Api.put(`/api/users/${currentUser.id}`, payload);
         msgEl.style.color = '#2e7d32';
         msgEl.textContent = 'Usuario actualizado.';
-        form.querySelector('[data-field="password"]').value = '';
+        ownForm.querySelector('[data-field="password"]').value = '';
       } catch (err) {
         msgEl.style.color = 'var(--danger)';
         msgEl.textContent = err.message;
       }
     });
-  });
+  }
 }
 
 function userForm(u) {
   return `
     <div id="user-form-${u.id}" style="border:1px solid var(--border);border-radius:10px;padding:16px;">
-      <div style="font-weight:700;color:var(--pink-dark);margin-bottom:10px;">${escapeHtml(u.name || u.username)} ${u.role === 'owner' ? '(dueña)' : ''}</div>
+      <div style="font-weight:700;color:var(--pink-dark);margin-bottom:10px;">${escapeHtml(u.name || u.username)} ${u.role === 'owner' ? '(dueña)' : ''} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">— vos</span></div>
       <div class="field-grid">
         <div class="field">
           <label>Nombre</label>
@@ -94,6 +94,19 @@ function userForm(u) {
       </div>
       <button class="btn btn-secondary btn-save-user" style="margin-top:12px;">Guardar</button>
       <div class="user-msg" style="margin-top:8px;font-size:13px;"></div>
+    </div>
+  `;
+}
+
+function userReadOnly(u) {
+  return `
+    <div style="border:1px solid var(--border);border-radius:10px;padding:16px;opacity:0.75;">
+      <div style="font-weight:700;color:var(--pink-dark);margin-bottom:10px;">${escapeHtml(u.name || u.username)} ${u.role === 'owner' ? '(dueña)' : ''}</div>
+      <div class="field-grid">
+        <div class="field"><label>Nombre</label><div class="value">${escapeHtml(u.name || '')}</div></div>
+        <div class="field"><label>Usuario</label><div class="value">${escapeHtml(u.username)}</div></div>
+      </div>
+      <div style="margin-top:10px;font-size:12.5px;color:var(--text-muted);font-style:italic;">Solo ${escapeHtml(u.name || u.username)} puede cambiar su propio usuario y contraseña.</div>
     </div>
   `;
 }

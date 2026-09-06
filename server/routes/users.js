@@ -10,6 +10,9 @@ router.get('/', (req, res) => {
 router.put('/:id', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+  if (Number(req.params.id) !== req.currentUser.id) {
+    return res.status(403).json({ error: 'Solo podés cambiar tu propio usuario y contraseña' });
+  }
   const { username, name, password } = req.body || {};
 
   let newUsername = user.username;
