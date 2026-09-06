@@ -253,7 +253,7 @@ function openConvertModal(contact, onConverted) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal-box" style="width:420px;text-align:left;">
+    <div class="modal-box modal-box-wide" style="text-align:left;">
       <h3 style="text-align:center;">Convertir a cliente</h3>
       <p style="text-align:center;">Se va a crear un cliente nuevo con los datos de este contacto. Completá lo que falta:</p>
       <div class="field-grid">

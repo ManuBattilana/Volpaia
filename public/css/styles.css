@@ -39,7 +39,7 @@ a { color: var(--pink-dark); }
   background: var(--white);
   border-radius: var(--radius);
   padding: 40px 36px;
-  width: 340px;
+  width: min(340px, 90vw);
   box-shadow: 0 10px 40px rgba(0,0,0,0.25);
   text-align: center;
 }
@@ -559,9 +559,11 @@ a { color: var(--pink-dark); }
   display: flex; align-items: center; justify-content: center;
 }
 .modal-box {
-  background: var(--white); border-radius: var(--radius); padding: 26px; width: 340px;
+  background: var(--white); border-radius: var(--radius); padding: 26px; width: min(340px, 90vw);
+  max-height: 85vh; overflow-y: auto;
   box-shadow: 0 10px 40px rgba(0,0,0,0.25); text-align: center;
 }
+.modal-box.modal-box-wide { width: min(440px, 92vw); }
 .modal-box h3 { margin: 0 0 10px; color: var(--pink-dark); }
 .modal-box p { color: var(--text-muted); margin-bottom: 20px; font-size: 14px; }
 .modal-actions { display: flex; gap: 10px; justify-content: center; }
@@ -619,11 +621,29 @@ a { color: var(--pink-dark); }
 .notif-item:last-child { border-bottom: none; }
 
 @media (max-width: 720px) {
+  html, body { overflow-x: hidden; }
   .layout { flex-direction: column; }
-  .sidebar { width: 100%; flex-direction: row; align-items: center; overflow-x: auto; }
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 10px 12px;
+  }
   .sidebar .logo-wrap { display: none; }
   .sidebar nav { flex-direction: row; }
-  .topbar { padding: 12px 16px; }
+  .nav-item { white-space: nowrap; }
+  .topbar { padding: 10px 14px; }
   .topbar-username { display: none; }
-  .content { padding: 20px; }
+  .content { padding: 16px; }
+  .page-header { flex-direction: column; align-items: flex-start; }
+  .page-actions { width: 100%; }
+  .page-actions .btn { flex: 1; }
+  .search-bar { flex-direction: column; align-items: stretch; }
+  .detail-header { flex-direction: column; align-items: stretch; }
+  .detail-actions { width: 100%; }
+  .detail-actions > * { flex: 1; text-align: center; }
+  .content table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .toolbar { flex-direction: column; align-items: stretch; }
 }
