@@ -327,7 +327,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
 
       <div class="detail-section">
         <h3>Productos</h3>
-        <table style="width:100%;border-collapse:collapse;">
+        <table style="width:100%;border-collapse:collapse;" class="items-table-responsive">
           <thead>
             <tr style="text-align:left;border-bottom:2px solid var(--border);">
               <th style="padding:8px 4px;">Producto</th>
@@ -340,11 +340,11 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
           <tbody>
             ${order.items.map(it => `
               <tr style="border-bottom:1px solid var(--border);">
-                <td style="padding:8px 4px;">${escapeHtml(it.product_code || '')} — ${escapeHtml(it.product_description || '')}</td>
-                <td style="padding:8px 4px;">${escapeHtml(it.presentation)}</td>
-                <td style="padding:8px 4px;">${it.quantity}</td>
-                <td style="padding:8px 4px;">${formatMoney(it.unit_price)}</td>
-                <td style="padding:8px 4px;font-weight:600;">${formatMoney(it.unit_price * it.quantity)}</td>
+                <td style="padding:8px 4px;" data-label="Producto">${escapeHtml(it.product_code || '')} — ${escapeHtml(it.product_description || '')}</td>
+                <td style="padding:8px 4px;" data-label="Presentación">${escapeHtml(it.presentation)}</td>
+                <td style="padding:8px 4px;" data-label="Cantidad">${it.quantity}</td>
+                <td style="padding:8px 4px;" data-label="Precio unit.">${formatMoney(it.unit_price)}</td>
+                <td style="padding:8px 4px;font-weight:600;" data-label="Subtotal">${formatMoney(it.unit_price * it.quantity)}</td>
               </tr>
             `).join('')}
           </tbody>

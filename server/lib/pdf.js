@@ -13,12 +13,33 @@ function money(v) {
   return '$' + Number(v || 0).toLocaleString('es-AR');
 }
 
-function drawHeader(doc, title, order) {
+function shippingLine(client) {
+  if (!client.shipping_type && !client.shipping_carrier) return null;
+  const parts = [];
+  if (client.shipping_type) parts.push(client.shipping_type);
+  if (client.shipping_carrier) parts.push(client.shipping_carrier);
+  let line = `Envío: ${parts.join(' · ')}`;
+  if (client.shipping_address) line += ` — ${client.shipping_address}`;
+  return line;
+}
+
+function drawHeader(doc, title, order, seller) {
   doc.fillColor(PINK_DARK).fontSize(20).text('VOLPAIA', { continued: false });
   doc.fontSize(14).fillColor('#000000').text(title);
   doc.moveDown(0.3);
   doc.fontSize(10).fillColor(TEXT_MUTED)
-    .text(`Pedido #${order.order_number} · ${new Date().toLocaleDateString('es-AR')}`);
+    .text(`Pedido #${order.order_number} · ${new Date().toLocaleDateString('es-AR')}${seller ? ' · Vendedor: ' + seller : ''}`);
+  doc.moveDown(1);
+}
+
+function drawClientBlock(doc, client) {
+  doc.fillColor('#000000').fontSize(11).text(`Cliente: ${clientLabel(client)}`);
+  doc.fontSize(10).fillColor(TEXT_MUTED);
+  if (client.phone) doc.text(`Tel: ${client.phone}`);
+  const addressParts = [client.address, client.locality, client.province].filter(Boolean);
+  if (addressParts.length) doc.text(`Dirección: ${addressParts.join(', ')}`);
+  const shipping = shippingLine(client);
+  if (shipping) doc.text(shipping);
   doc.moveDown(1);
 }
 
@@ -26,17 +47,14 @@ function drawHeader(doc, title, order) {
  * PDF completo del pedido, con precios. Se genera al crear el pedido y se
  * regenera cada vez que se edita mientras está en "Pedido creado".
  */
-function generateOrderPdf(filePath, { order, items, client }) {
+function generateOrderPdf(filePath, { order, items, client, seller }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40 });
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
 
-    drawHeader(doc, 'Pedido', order);
-
-    doc.fillColor('#000000').fontSize(11).text(`Cliente: ${clientLabel(client)}`);
-    if (client.phone) doc.fontSize(10).fillColor(TEXT_MUTED).text(`Tel: ${client.phone}`);
-    doc.moveDown(1);
+    drawHeader(doc, 'Pedido', order, seller);
+    drawClientBlock(doc, client);
 
     const colX = { desc: 40, pres: 260, qty: 340, price: 400, subtotal: 470 };
     doc.fontSize(10).fillColor(PINK_DARK);
@@ -73,10 +91,6 @@ function generateOrderPdf(filePath, { order, items, client }) {
       doc.fillColor('#000000').text(order.notes);
     }
 
-    doc.moveDown(1);
-    doc.fontSize(8).fillColor(TEXT_MUTED)
-      .text('El envío no está incluido en este monto; se abona por separado directo al transportista.');
-
     doc.end();
     stream.on('finish', resolve);
     stream.on('error', reject);
@@ -88,15 +102,14 @@ function generateOrderPdf(filePath, { order, items, client }) {
  * medida que se separa la mercadería. Pensado para verse bien también desde
  * el celular.
  */
-function generatePreparationPdf(filePath, { order, items, client }) {
+function generatePreparationPdf(filePath, { order, items, client, seller }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40 });
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
 
-    drawHeader(doc, 'Lista de preparación', order);
-    doc.fillColor('#000000').fontSize(11).text(`Cliente: ${clientLabel(client)}`);
-    doc.moveDown(1.2);
+    drawHeader(doc, 'Lista de preparación', order, seller);
+    drawClientBlock(doc, client);
 
     doc.fontSize(11);
     items.forEach(it => {

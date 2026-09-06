@@ -644,6 +644,32 @@ a { color: var(--pink-dark); }
   .detail-header { flex-direction: column; align-items: stretch; }
   .detail-actions { width: 100%; }
   .detail-actions > * { flex: 1; text-align: center; }
-  .content table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .content table:not(.items-table-responsive) { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .toolbar { flex-direction: column; align-items: stretch; }
+
+  /* Tabla de ítems de pedido: en mobile se ve como tarjetas apiladas en vez
+     de una tabla angosta con columnas cortadas. */
+  .items-table-responsive thead { display: none; }
+  .items-table-responsive, .items-table-responsive tbody, .items-table-responsive tr, .items-table-responsive td {
+    display: block;
+    width: 100%;
+  }
+  .items-table-responsive tr {
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--white);
+  }
+  .items-table-responsive td {
+    padding: 3px 0 !important;
+    border: none !important;
+    font-size: 13.5px;
+  }
+  .items-table-responsive td[data-label]::before {
+    content: attr(data-label) ": ";
+    font-weight: 700;
+    color: var(--pink-dark);
+  }
+  .items-table-responsive td[data-label="Producto"] { font-weight: 600; font-size: 14.5px; margin-bottom: 4px; }
 }

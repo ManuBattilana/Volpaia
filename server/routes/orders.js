@@ -63,7 +63,16 @@ function getItems(orderId) {
 }
 
 function getClient(clientId) {
-  return db.prepare('SELECT id, first_name, last_name, business_name, client_number, phone FROM clients WHERE id = ?').get(clientId);
+  return db.prepare(`
+    SELECT id, first_name, last_name, business_name, client_number, phone,
+           address, locality, province, shipping_type, shipping_carrier, shipping_address
+    FROM clients WHERE id = ?
+  `).get(clientId);
+}
+
+function getSellerName(userId) {
+  const u = db.prepare('SELECT name, username FROM users WHERE id = ?').get(userId);
+  return u ? (u.name || u.username) : '';
 }
 
 function serializeOrder(order) {
@@ -116,9 +125,10 @@ function regenerateOrderPdf(orderId) {
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   const items = getItems(orderId);
   const client = getClient(order.client_id);
+  const seller = getSellerName(order.created_by);
   const filename = `pedido-${order.order_number}.pdf`;
   const filePath = path.join(uploadDir, filename);
-  return generateOrderPdf(filePath, { order, items, client }).then(() => {
+  return generateOrderPdf(filePath, { order, items, client, seller }).then(() => {
     db.prepare('UPDATE orders SET order_pdf_path = ? WHERE id = ?').run(`/uploads/${filename}`, orderId);
   });
 }
@@ -127,9 +137,10 @@ function generatePrepPdf(orderId) {
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   const items = getItems(orderId);
   const client = getClient(order.client_id);
+  const seller = getSellerName(order.created_by);
   const filename = `preparacion-${order.order_number}.pdf`;
   const filePath = path.join(uploadDir, filename);
-  return generatePreparationPdf(filePath, { order, items, client }).then(() => {
+  return generatePreparationPdf(filePath, { order, items, client, seller }).then(() => {
     db.prepare('UPDATE orders SET preparation_pdf_path = ? WHERE id = ?').run(`/uploads/${filename}`, orderId);
   });
 }
