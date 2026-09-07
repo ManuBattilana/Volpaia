@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { generatePreparationPdf } = require('../lib/pdf');
 const { validateItems } = require('../lib/orderItems');
+const { sendPush } = require('../lib/push');
 
 // Verificación mínima de que el archivo generado es un PDF de verdad
 // (encabezado %PDF- y algo de contenido) antes de darlo por válido —
@@ -141,7 +142,7 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
   router.get('/statuses', (req, res) => res.json(STATUSES));
 
   router.get('/', (req, res) => {
-    const { status, q } = req.query;
+    const { status, q, client_id } = req.query;
     let sql = `
       SELECT o.*, c.first_name, c.last_name, c.business_name, c.client_number
       FROM orders o JOIN clients c ON c.id = o.client_id
@@ -151,6 +152,10 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
     if (status !== undefined && status !== '') {
       sql += ' AND o.status_index = ? AND o.cancelled = 0';
       params.push(Number(status));
+    }
+    if (client_id) {
+      sql += ' AND o.client_id = ?';
+      params.push(Number(client_id));
     }
     if (q) {
       sql += ` AND (c.first_name LIKE ? OR c.last_name LIKE ? OR c.business_name LIKE ? OR CAST(o.order_number AS TEXT) LIKE ?)`;
@@ -233,7 +238,11 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
 
     db.prepare("UPDATE orders SET cancelled = 1, updated_at = datetime('now') WHERE id = ?").run(order.id);
     const otherId = otherUserId(req.currentUser.id);
-    if (otherId) notify(otherId, 'status_change', order.id, `${req.currentUser.name || req.currentUser.username} canceló el pedido #${order.order_number}`);
+    if (otherId) {
+      const message = `${req.currentUser.name || req.currentUser.username} canceló el pedido #${order.order_number}`;
+      notify(otherId, 'status_change', order.id, message);
+      sendPush(db, [otherId], { title: 'Volpaia', body: message, url: '/' });
+    }
 
     const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
     res.json(serializeOrder(updated));
@@ -348,7 +357,10 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
 
       if (notifyMessage) {
         const otherId = otherUserId(req.currentUser.id);
-        if (otherId) notify(otherId, 'status_change', order.id, notifyMessage);
+        if (otherId) {
+          notify(otherId, 'status_change', order.id, notifyMessage);
+          sendPush(db, [otherId], { title: 'Volpaia', body: notifyMessage, url: '/' });
+        }
       }
     });
     tx();
@@ -379,12 +391,27 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
 
       const otherId = otherUserId(req.currentUser.id);
       if (otherId) {
-        notify(otherId, 'status_change', order.id,
-          `${req.currentUser.name || req.currentUser.username} corrigió el pedido #${order.order_number}: volvió a "${STATUSES[prevIndex]}"`);
+        const message = `${req.currentUser.name || req.currentUser.username} corrigió el pedido #${order.order_number}: volvió a "${STATUSES[prevIndex]}"`;
+        notify(otherId, 'status_change', order.id, message);
+        sendPush(db, [otherId], { title: 'Volpaia', body: message, url: '/' });
       }
     });
     tx();
 
+    const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
+    res.json(serializeOrder(updated));
+  });
+
+  // Pantalla de Posventa: marcar a mano que ya se hizo el contacto de
+  // seguimiento 1 (¿llegó bien?) o 2 (¿querés reponer?), por si se hace
+  // antes de que dispare el recordatorio automático.
+  router.post('/:id/mark-followup', (req, res) => {
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const { which } = req.body || {};
+    if (which !== 1 && which !== 2) return res.status(400).json({ error: 'Falta indicar qué seguimiento (1 o 2)' });
+    const column = which === 1 ? 'reminder_1_done' : 'reminder_2_done';
+    db.prepare(`UPDATE orders SET ${column} = 1 WHERE id = ?`).run(order.id);
     const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
     res.json(serializeOrder(updated));
   });

@@ -90,12 +90,14 @@ const CONTACT_SECTIONS = [
   },
 ];
 
-async function renderContactDetail(container, contactId, onBack, onDeleted, onConverted, onNewQuote) {
+async function renderContactDetail(container, contactId, onBack, onDeleted, onConverted, onNewQuote, onOpenQuote) {
   let contact = contactId ? await Api.get(`/api/contacts/${contactId}`) : {
     first_name: '', last_name: '', business_name: '', status: 'Activo',
     catalog_sent_history: '', pricelist_sent_history: '', converted_client_id: null
   };
   let editing = !contactId;
+  const contactQuotes = contactId ? await Api.get(`/api/quotes?contact_id=${contactId}`) : [];
+  const statusHistory = contactId ? await Api.get(`/api/contacts/${contactId}/history`) : [];
 
   function draw() {
     const name = [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Nuevo contacto';
@@ -152,7 +154,40 @@ async function renderContactDetail(container, contactId, onBack, onDeleted, onCo
           ? `<textarea data-field="notes" rows="4" style="width:100%;padding:10px;border-radius:7px;border:1px solid var(--border);background:var(--pink-light);font-family:inherit;">${escapeHtml(contact.notes || '')}</textarea>`
           : `<div class="value ${contact.notes ? '' : 'empty'}">${contact.notes ? escapeHtml(contact.notes).replace(/\n/g, '<br>') : 'Sin notas'}</div>`}
       </div>
-    `;
+    ` + (!editing && contactId ? `
+      <div class="detail-section">
+        <h3>Presupuestos (${contactQuotes.length})</h3>
+        ${contactQuotes.length === 0 ? '<div class="empty-state">Todavía no le mandamos ningún presupuesto.</div>' : `
+          <div class="list-view">
+            ${contactQuotes.map(q => `
+              <div class="client-card history-row" data-quote-id="${q.id}" style="cursor:pointer;">
+                <div class="client-info">
+                  <div><span class="client-num">#${q.quote_number}</span><span class="client-name">${escapeHtml(q.created_at.slice(0, 10))}</span></div>
+                  <div class="client-location">${escapeHtml(q.status)} · ${formatMoney(q.calculated_amount)}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+      <div class="detail-section">
+        <h3>Historial de estado</h3>
+        ${statusHistory.length === 0 ? '<div class="empty-state">Sin cambios de estado registrados.</div>' : `
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            ${statusHistory.map(h => `
+              <div style="border-left:3px solid var(--pink-dark);padding-left:12px;">
+                <div style="font-size:13.5px;">${h.from_status ? escapeHtml(h.from_status) + ' → ' : ''}<strong>${escapeHtml(h.to_status)}</strong></div>
+                <div style="font-size:12px;color:var(--text-muted);">${escapeHtml(h.changed_by_name || h.changed_by_username || '')} · ${escapeHtml(h.changed_at)}</div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+    ` : '');
+
+    container.querySelectorAll('[data-quote-id]').forEach(el => {
+      el.addEventListener('click', () => onOpenQuote && onOpenQuote(Number(el.dataset.quoteId)));
+    });
 
     const sectionsEl = document.getElementById('sections');
     sectionsEl.innerHTML = CONTACT_SECTIONS.map(sec => `

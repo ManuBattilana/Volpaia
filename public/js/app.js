@@ -71,7 +71,9 @@ function draw() {
       Nav.route.id,
       () => navigateTo('clientes'),
       () => navigateTo('clientes'),
-      (client) => navigateTo('presupuesto-nuevo', { preset: { type: 'client', record: client } })
+      (client) => navigateTo('presupuesto-nuevo', { preset: { type: 'client', record: client } }),
+      (orderId) => navigateTo('pedido-detalle', { id: orderId }),
+      (quoteId) => navigateTo('presupuesto-detalle', { id: quoteId })
     );
   } else if (page === 'productos') {
     renderProductosCategorias(
@@ -140,7 +142,14 @@ function draw() {
       () => navigateTo('contactos'),
       () => navigateTo('contactos'),
       (clientId) => navigateTo('cliente-detalle', { id: clientId }),
-      (contact) => navigateTo('presupuesto-nuevo', { preset: { type: 'contact', record: contact } })
+      (contact) => navigateTo('presupuesto-nuevo', { preset: { type: 'contact', record: contact } }),
+      (quoteId) => navigateTo('presupuesto-detalle', { id: quoteId })
+    );
+  } else if (page === 'posventa') {
+    renderPosventa(
+      content,
+      (orderId) => navigateTo('pedido-detalle', { id: orderId }),
+      (client) => navigateTo('presupuesto-nuevo', { preset: { type: 'client', record: client } })
     );
   } else if (page === 'comisiones') {
     renderComisiones(content, (orderId) => navigateTo('pedido-detalle', { id: orderId }));

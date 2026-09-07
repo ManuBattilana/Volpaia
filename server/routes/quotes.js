@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const { generateQuotePdf } = require('../lib/pdf');
 const { validateItems } = require('../lib/orderItems');
+const { sendPush } = require('../lib/push');
 
 // Campos "de cliente" que vive en el Presupuesto — se completan a mano
 // cuando el origen es un Contacto (le faltan datos fiscales/de envío), o
@@ -15,7 +16,7 @@ const PERSON_FIELDS = [
 
 module.exports = function quotesRouterFactory(db, uploadDir, orderHelpers) {
   const router = express.Router();
-  const { assertValidPdf, getSellerName, generatePrepPdf, nextOrderNumber } = orderHelpers;
+  const { assertValidPdf, getSellerName, generatePrepPdf, nextOrderNumber, otherUserId, notify } = orderHelpers;
 
   function nextQuoteNumber() {
     const tx = db.transaction(() => {
@@ -68,10 +69,12 @@ module.exports = function quotesRouterFactory(db, uploadDir, orderHelpers) {
   }
 
   router.get('/', (req, res) => {
-    const { status, q } = req.query;
+    const { status, q, client_id, contact_id } = req.query;
     let sql = 'SELECT * FROM quotes WHERE 1=1';
     const params = [];
     if (status) { sql += ' AND status = ?'; params.push(status); }
+    if (client_id) { sql += ' AND client_id = ?'; params.push(Number(client_id)); }
+    if (contact_id) { sql += ' AND contact_id = ?'; params.push(Number(contact_id)); }
     if (q) {
       sql += ` AND (first_name LIKE ? OR last_name LIKE ? OR business_name LIKE ? OR CAST(quote_number AS TEXT) LIKE ?)`;
       const like = `%${q}%`;
@@ -198,6 +201,7 @@ module.exports = function quotesRouterFactory(db, uploadDir, orderHelpers) {
     // la transacción de abajo — sql.js no admite transacciones anidadas.
     const orderNumber = nextOrderNumber();
     const clientNumber = quote.client_id ? null : nextClientNumber();
+    const contact = quote.contact_id ? db.prepare('SELECT status FROM contacts WHERE id = ?').get(quote.contact_id) : null;
 
     const tx = db.transaction(() => {
       let clientId = quote.client_id;
@@ -210,6 +214,8 @@ module.exports = function quotesRouterFactory(db, uploadDir, orderHelpers) {
         if (quote.contact_id) {
           db.prepare("UPDATE contacts SET status = 'Convertido', converted_client_id = ?, updated_at = datetime('now') WHERE id = ?")
             .run(clientId, quote.contact_id);
+          db.prepare('INSERT INTO contact_status_history (contact_id, from_status, to_status, changed_by) VALUES (?, ?, ?, ?)')
+            .run(quote.contact_id, contact ? contact.status : null, 'Convertido', req.currentUser.id);
         }
       } else {
         const sets = PERSON_FIELDS.map(f => `${f} = ?`).join(', ');
@@ -241,6 +247,14 @@ module.exports = function quotesRouterFactory(db, uploadDir, orderHelpers) {
       await generatePrepPdf(orderId);
     } catch (err) {
       console.error('Error generando PDF de preparación', err);
+    }
+
+    const otherId = otherUserId(req.currentUser.id);
+    if (otherId) {
+      const clientLabel = [quote.first_name, quote.last_name].filter(Boolean).join(' ') || quote.business_name || `presupuesto #${quote.quote_number}`;
+      const message = `Hay un pedido nuevo #${orderNumber} (${clientLabel})`;
+      notify(otherId, 'status_change', orderId, message);
+      sendPush(db, [otherId], { title: 'Volpaia', body: message, url: '/' });
     }
 
     const updatedQuote = db.prepare('SELECT * FROM quotes WHERE id = ?').get(quote.id);

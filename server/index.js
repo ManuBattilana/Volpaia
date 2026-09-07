@@ -15,6 +15,7 @@ const dashboardRouterFactory = require('./routes/dashboard');
 const messagesRouterFactory = require('./routes/messages');
 const pushRouterFactory = require('./routes/push');
 const quotesRouterFactory = require('./routes/quotes');
+const searchRouterFactory = require('./routes/search');
 const { checkReminders } = require('./lib/reminders');
 const { ensureVapidKeys } = require('./lib/push');
 
@@ -287,6 +288,7 @@ async function start() {
   app.use('/api/dashboard', requireAuth, dashboardRouterFactory(db));
   app.use('/api/messages', requireAuth, messagesRouterFactory(db));
   app.use('/api/push', requireAuth, pushRouterFactory(db));
+  app.use('/api/search', requireAuth, searchRouterFactory(db));
 
   // ---------- Static frontend ----------
   // ASSET_VERSION cambia en cada arranque del servidor (cada deploy reinicia

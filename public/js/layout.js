@@ -7,6 +7,7 @@ const MENU_ITEMS = [
   { key: 'productos', label: 'Productos', enabled: true },
   { key: 'presupuestos', label: 'Presupuestos', enabled: true },
   { key: 'pedidos', label: 'Pedidos', enabled: true },
+  { key: 'posventa', label: 'Posventa', enabled: true },
   { key: 'comisiones', label: 'Comisiones', enabled: true },
   { key: 'chat', label: 'Chat', enabled: true },
   { key: 'configuracion', label: 'Configuración', enabled: true },
@@ -85,7 +86,10 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
           <button class="hamburger-btn" id="hamburger-btn" aria-label="Abrir menú">
             <span></span><span></span><span></span>
           </button>
-          <div class="topbar-spacer"></div>
+          <div class="global-search-wrap" id="global-search-wrap">
+            <input type="text" id="global-search-input" class="text-input" placeholder="Buscar cliente, contacto, pedido o presupuesto...">
+            <div class="global-search-results" id="global-search-results" hidden></div>
+          </div>
           <div class="topbar-right">
             <div class="notif-bell-wrap">
               <button class="notif-bell" id="notif-bell" title="Notificaciones">${BellIcon}<span class="notif-badge" id="notif-badge" hidden>0</span></button>
@@ -134,6 +138,7 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
 
   document.getElementById('logout-btn').addEventListener('click', onLogout);
 
+  setupGlobalSearch();
   setupNotificationBell();
   refreshChatBadge();
   notifPollInterval = setInterval(() => { refreshNotifBadge(); refreshChatBadge(); }, 45000);
@@ -144,6 +149,64 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
   // ni se muestra ningún aviso al respecto.
 
   return document.getElementById('page-content');
+}
+
+function setupGlobalSearch() {
+  const input = document.getElementById('global-search-input');
+  const results = document.getElementById('global-search-results');
+  if (!input) return;
+
+  function statusLabelFor(o) {
+    return o.cancelled ? 'Cancelado' : (typeof ORDER_STATUSES !== 'undefined' ? ORDER_STATUSES[o.status_index] : '');
+  }
+
+  function personLabel(p) {
+    const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || '(Sin nombre)';
+    return p.business_name ? `${name} — ${p.business_name}` : name;
+  }
+
+  function renderGroup(title, items, renderItem) {
+    if (items.length === 0) return '';
+    return `
+      <div class="global-search-group">
+        <div class="global-search-group-title">${title}</div>
+        ${items.map(renderItem).join('')}
+      </div>
+    `;
+  }
+
+  function draw(data) {
+    const html = [
+      renderGroup('Clientes', data.clients, c => `<div class="global-search-item" data-nav="cliente-detalle" data-id="${c.id}">#${c.client_number} ${escapeHtml(personLabel(c))}</div>`),
+      renderGroup('Contactos', data.contacts, c => `<div class="global-search-item" data-nav="contacto-detalle" data-id="${c.id}">${escapeHtml(personLabel(c))}</div>`),
+      renderGroup('Pedidos', data.orders, o => `<div class="global-search-item" data-nav="pedido-detalle" data-id="${o.id}">#${o.order_number} ${escapeHtml(personLabel(o))} · ${escapeHtml(statusLabelFor(o))}</div>`),
+      renderGroup('Presupuestos', data.quotes, q => `<div class="global-search-item" data-nav="presupuesto-detalle" data-id="${q.id}">#${q.quote_number} ${escapeHtml(personLabel(q))} · ${escapeHtml(q.status)}</div>`),
+    ].join('');
+    results.innerHTML = html || '<div class="empty-state" style="padding:14px;">Sin resultados</div>';
+    results.hidden = false;
+    results.querySelectorAll('.global-search-item').forEach(el => {
+      el.addEventListener('click', () => {
+        results.hidden = true;
+        input.value = '';
+        if (typeof currentOnNavigate === 'function') currentOnNavigate(el.dataset.nav, { id: Number(el.dataset.id) });
+      });
+    });
+  }
+
+  let timer;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { results.hidden = true; return; }
+    timer = setTimeout(async () => {
+      const data = await Api.get('/api/search?q=' + encodeURIComponent(q));
+      draw(data);
+    }, 300);
+  });
+  input.addEventListener('focus', () => { if (input.value.trim().length >= 2) results.hidden = false; });
+  document.addEventListener('click', (e) => {
+    if (!results.hidden && !e.target.closest('#global-search-wrap')) results.hidden = true;
+  });
 }
 
 // Insignia de mensajes sin leer en el ítem "Chat" del menú — es un contador

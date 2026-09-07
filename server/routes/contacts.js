@@ -40,12 +40,20 @@ router.get('/:id', (req, res) => {
   res.json(row);
 });
 
+function logStatusChange(contactId, fromStatus, toStatus, changedBy) {
+  if (fromStatus === toStatus) return;
+  db.prepare('INSERT INTO contact_status_history (contact_id, from_status, to_status, changed_by) VALUES (?, ?, ?, ?)')
+    .run(contactId, fromStatus || null, toStatus, changedBy || null);
+}
+
 router.post('/', (req, res) => {
   const body = req.body || {};
   const cols = CONTACT_FIELDS;
-  const values = cols.map(f => body[f] ?? (f === 'status' ? 'Activo' : null));
+  const status = body.status || 'Activo';
+  const values = cols.map(f => body[f] ?? (f === 'status' ? status : null));
   const placeholders = cols.map(() => '?').join(',');
   const info = db.prepare(`INSERT INTO contacts (${cols.join(',')}) VALUES (${placeholders})`).run(...values);
+  logStatusChange(info.lastInsertRowid, null, status, req.currentUser.id);
   const row = db.prepare('SELECT * FROM contacts WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json(row);
 });
@@ -58,8 +66,18 @@ router.put('/:id', (req, res) => {
   const values = CONTACT_FIELDS.map(f => body[f] ?? existing[f]);
   db.prepare(`UPDATE contacts SET ${sets.join(', ')}, updated_at = datetime('now') WHERE id = ?`)
     .run(...values, req.params.id);
+  if (body.status !== undefined) logStatusChange(existing.id, existing.status, body.status, req.currentUser.id);
   const row = db.prepare('SELECT * FROM contacts WHERE id = ?').get(req.params.id);
   res.json(row);
+});
+
+router.get('/:id/history', (req, res) => {
+  const rows = db.prepare(`
+    SELECT h.*, u.name AS changed_by_name, u.username AS changed_by_username
+    FROM contact_status_history h LEFT JOIN users u ON u.id = h.changed_by
+    WHERE h.contact_id = ? ORDER BY h.changed_at ASC, h.id ASC
+  `).all(req.params.id);
+  res.json(rows);
 });
 
 router.delete('/:id', (req, res) => {
@@ -131,6 +149,7 @@ router.post('/:id/convert', (req, res) => {
     const clientId = info.lastInsertRowid;
     db.prepare("UPDATE contacts SET status = 'Convertido', converted_client_id = ?, updated_at = datetime('now') WHERE id = ?")
       .run(clientId, contact.id);
+    logStatusChange(contact.id, contact.status, 'Convertido', req.currentUser.id);
     return clientId;
   });
   const clientId = tx();

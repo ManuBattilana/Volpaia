@@ -32,12 +32,20 @@ async function renderConfiguracion(container, currentUser) {
     </div>
 
     <div class="detail-section">
+      <h3>Notificaciones en este dispositivo</h3>
+      <p style="font-size:13px;color:var(--text-muted);">Activalas para recibir avisos de pedidos y mensajes de chat como notificación del celular/PC, aunque no tengas la app abierta.</p>
+      <div id="push-status"></div>
+    </div>
+
+    <div class="detail-section">
       <h3>Usuarios</h3>
       <div style="display:flex;flex-direction:column;gap:20px;">
         ${users.map(u => u.id === currentUser.id ? userForm(u) : userReadOnly(u)).join('')}
       </div>
     </div>
   `;
+
+  drawPushStatus();
 
   document.getElementById('btn-save-settings').addEventListener('click', async () => {
     const msg = document.getElementById('settings-msg');
@@ -77,6 +85,35 @@ async function renderConfiguracion(container, currentUser) {
       }
     });
   }
+}
+
+function drawPushStatus() {
+  const el = document.getElementById('push-status');
+  if (!el) return;
+  if (typeof pushSupported !== 'function' || !pushSupported()) {
+    el.innerHTML = '<span style="color:var(--text-muted);font-size:13px;">Este navegador no soporta notificaciones push.</span>';
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    el.innerHTML = '<span style="color:#2e7d32;font-weight:600;">✓ Activadas en este dispositivo</span>';
+    if (typeof setupPushNotifications === 'function') setupPushNotifications();
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    el.innerHTML = '<span style="color:var(--danger);font-size:13px;">Bloqueadas — habilitalas desde la configuración de notificaciones del navegador/sistema para esta app.</span>';
+    return;
+  }
+  el.innerHTML = '<button class="btn btn-primary" id="btn-activate-push">Activar notificaciones</button>';
+  document.getElementById('btn-activate-push').addEventListener('click', async () => {
+    const result = await requestAndSubscribePush();
+    if (result.ok) {
+      drawPushStatus();
+    } else if (result.reason === 'denied') {
+      drawPushStatus();
+    } else {
+      alert('No se pudo activar la notificación push. Probá de nuevo en unos segundos.');
+    }
+  });
 }
 
 function userForm(u) {

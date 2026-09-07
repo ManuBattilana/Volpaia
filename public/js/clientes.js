@@ -164,11 +164,13 @@ function renderFieldEdit(field, client) {
   return `<div class="field ${field.full ? 'full' : ''}"><label>${field.label}</label><input type="${field.type || 'text'}" data-field="${field.key}" value="${escapeHtml(val)}"></div>`;
 }
 
-async function renderClientDetail(container, clientId, onBack, onDeleted, onNewQuote) {
+async function renderClientDetail(container, clientId, onBack, onDeleted, onNewQuote, onOpenOrder, onOpenQuote) {
   let client = clientId ? await Api.get(`/api/clients/${clientId}`) : {
     client_number: null, first_name: '', last_name: '', business_name: '', favorite: 0
   };
   let editing = !clientId;
+  const clientOrders = clientId ? await Api.get(`/api/orders?client_id=${clientId}`) : [];
+  const clientQuotes = clientId ? await Api.get(`/api/quotes?client_id=${clientId}`) : [];
 
   function draw() {
     const name = [client.first_name, client.last_name].filter(Boolean).join(' ') || 'Nuevo cliente';
@@ -213,9 +215,47 @@ async function renderClientDetail(container, clientId, onBack, onDeleted, onNewQ
           ? `<textarea data-field="notes" rows="4" style="width:100%;padding:10px;border-radius:7px;border:1px solid var(--border);background:var(--pink-light);font-family:inherit;">${escapeHtml(client.notes || '')}</textarea>`
           : `<div class="value ${client.notes ? '' : 'empty'}">${client.notes ? escapeHtml(client.notes).replace(/\n/g, '<br>') : 'Sin notas'}</div>`}
       </div>
-    `;
+    ` + (!editing && clientId ? `
+      <div class="detail-section">
+        <h3>Pedidos (${clientOrders.length})</h3>
+        ${clientOrders.length === 0 ? '<div class="empty-state">Todavía no le hicimos ningún pedido.</div>' : `
+          <div class="list-view">
+            ${clientOrders.map(o => `
+              <div class="client-card history-row" data-order-id="${o.id}" style="cursor:pointer;">
+                <div class="client-info">
+                  <div><span class="client-num">#${o.order_number}</span><span class="client-name">${escapeHtml(o.created_at.slice(0, 10))}</span></div>
+                  <div class="client-location">${escapeHtml(o.cancelled ? 'Cancelado' : o.status_label)} · ${formatMoney(o.calculated_amount)}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+      <div class="detail-section">
+        <h3>Presupuestos (${clientQuotes.length})</h3>
+        ${clientQuotes.length === 0 ? '<div class="empty-state">Todavía no le mandamos ningún presupuesto.</div>' : `
+          <div class="list-view">
+            ${clientQuotes.map(q => `
+              <div class="client-card history-row" data-quote-id="${q.id}" style="cursor:pointer;">
+                <div class="client-info">
+                  <div><span class="client-num">#${q.quote_number}</span><span class="client-name">${escapeHtml(q.created_at.slice(0, 10))}</span></div>
+                  <div class="client-location">${escapeHtml(q.status)} · ${formatMoney(q.calculated_amount)}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      </div>
+    ` : '');
 
     document.getElementById('btn-back').addEventListener('click', onBack);
+
+    container.querySelectorAll('[data-order-id]').forEach(el => {
+      el.addEventListener('click', () => onOpenOrder && onOpenOrder(Number(el.dataset.orderId)));
+    });
+    container.querySelectorAll('[data-quote-id]').forEach(el => {
+      el.addEventListener('click', () => onOpenQuote && onOpenQuote(Number(el.dataset.quoteId)));
+    });
 
     if (!editing) {
       const newQuoteBtn = document.getElementById('btn-new-quote');

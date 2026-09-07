@@ -2,7 +2,12 @@ const CommissionsState = { from: '', to: '', paid: '' };
 
 async function renderComisiones(container, onOpenOrder) {
   container.innerHTML = `
-    <div class="page-header"><h2>Comisiones</h2></div>
+    <div class="page-header">
+      <h2>Comisiones</h2>
+      <div class="page-actions">
+        <a class="btn btn-secondary" id="cm-export" href="/api/commissions/export.csv">Exportar CSV</a>
+      </div>
+    </div>
     <div class="search-bar">
       <div class="field" style="min-width:160px;">
         <label>Desde</label>
@@ -38,6 +43,7 @@ async function renderComisiones(container, onOpenOrder) {
     if (CommissionsState.from) params.set('from', CommissionsState.from);
     if (CommissionsState.to) params.set('to', CommissionsState.to);
     if (CommissionsState.paid !== '') params.set('paid', CommissionsState.paid);
+    document.getElementById('cm-export').href = '/api/commissions/export.csv?' + params.toString();
     const data = await Api.get('/api/commissions?' + params.toString());
     document.getElementById('cm-total').textContent = `Total: ${formatMoney(data.total)} (${data.commissions.length} ${data.commissions.length === 1 ? 'comisión' : 'comisiones'})`;
     const listEl = document.getElementById('cm-container');
