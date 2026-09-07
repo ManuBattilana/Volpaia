@@ -1,9 +1,12 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { generatePreparationPdf, generateQuotePdf } = require('../lib/pdf');
+const { generatePreparationPdf, generateQuotePdf, generateManufacturingPdf } = require('../lib/pdf');
 const { validateItems } = require('../lib/orderItems');
 const { sendPush } = require('../lib/push');
+const { addManufacturingReceipt, isOrderManufacturingComplete } = require('../lib/manufacturing');
+const { unitsToPresentations, toUnits } = require('../lib/stock');
+const PDFDocument = require('pdfkit');
 
 // Verificación mínima de que el archivo generado es un PDF de verdad
 // (encabezado %PDF- y algo de contenido) antes de darlo por válido —
@@ -535,6 +538,91 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
       WHERE h.order_id = ? ORDER BY h.created_at DESC, h.id DESC
     `).all(req.params.id);
     res.json(rows);
+  });
+
+  // Fabricación pendiente de este pedido puntual (lo que no alcanzó a
+  // cubrir el stock al confirmarlo).
+  router.get('/:id/manufacturing', (req, res) => {
+    const rows = db.prepare(`
+      SELECT * FROM manufacturing_pending WHERE order_id = ? ORDER BY id ASC
+    `).all(req.params.id);
+    const withProducts = rows.map(r => {
+      const product = db.prepare('SELECT id, code, description, sale_dozen, sale_pack3, sale_unit FROM products WHERE id = ?').get(r.product_id);
+      const receipts = db.prepare(`
+        SELECT rc.*, u.name AS created_by_name FROM manufacturing_receipts rc
+        LEFT JOIN users u ON u.id = rc.created_by
+        WHERE rc.manufacturing_pending_id = ? ORDER BY rc.created_at ASC
+      `).all(r.id);
+      return { ...r, product, receipts };
+    });
+    res.json(withProducts);
+  });
+
+  router.post('/manufacturing/:pendingId/receipt', (req, res) => {
+    const pending = db.prepare('SELECT * FROM manufacturing_pending WHERE id = ?').get(req.params.pendingId);
+    if (!pending) return res.status(404).json({ error: 'No se encontró ese pendiente de fabricación' });
+    const { presentation, quantity, note } = req.body || {};
+    if (!presentation || !quantity || Number(quantity) <= 0) {
+      return res.status(400).json({ error: 'Faltan la presentación y/o la cantidad' });
+    }
+    let units;
+    try {
+      units = toUnits(presentation, quantity);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+
+    let result;
+    try {
+      result = addManufacturingReceipt(db, pending.id, units, note, req.currentUser.id);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+
+    if (result.completed) {
+      const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(pending.order_id);
+      const product = db.prepare('SELECT code, description FROM products WHERE id = ?').get(pending.product_id);
+      const allDone = isOrderManufacturingComplete(db, pending.order_id);
+      const message = allDone
+        ? `Darío marcó como lista la fabricación del pedido #${order.order_number} — ya se puede avisar al cliente`
+        : `Darío completó la fabricación de ${product.code || ''} - ${product.description || ''} del pedido #${order.order_number}`;
+      const otherId = otherUserId(req.currentUser.id);
+      if (otherId) {
+        notify(otherId, 'status_change', order.id, message);
+        sendPush(db, [otherId], { title: 'Volpaia', body: message, url: '/?open=pedido&id=' + order.id });
+      }
+    }
+
+    res.json(result.pending);
+  });
+
+  // PDF de fabricación pendiente de este pedido, para que Darío lo
+  // imprima — se genera al vuelo, no se guarda en el servidor.
+  router.get('/:id/manufacturing-pdf', (req, res) => {
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const client = getClient(order.client_id);
+    const pending = db.prepare(`
+      SELECT * FROM manufacturing_pending WHERE order_id = ? AND status != 'completo' ORDER BY id ASC
+    `).all(order.id);
+    const rows = pending.map(p => {
+      const product = db.prepare('SELECT * FROM products WHERE id = ?').get(p.product_id);
+      const missingUnits = p.quantity_needed_units - p.quantity_received_units;
+      const presentations = unitsToPresentations(product, missingUnits);
+      const [presentation, quantity_missing] = Object.entries(presentations)[0] || [p.presentation, missingUnits];
+      return { product_id: product.id, product_code: product.code, product_description: product.description, presentation, quantity_missing };
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="fabricacion-pedido-${order.order_number}.pdf"`);
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    doc.pipe(res);
+    generateManufacturingPdf(doc, {
+      title: 'Fabricación pendiente',
+      subtitle: `Pedido #${order.order_number} — ${[client.first_name, client.last_name].filter(Boolean).join(' ')}`,
+      rows,
+      groupByProduct: false,
+    });
   });
 
   return router;

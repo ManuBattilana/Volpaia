@@ -111,6 +111,8 @@ function draw() {
     renderStockList(content, (id) => navigateTo('stock-detalle', { id }));
   } else if (page === 'stock-detalle') {
     renderStockDetail(content, Nav.route.id, () => navigateTo('stock'));
+  } else if (page === 'fabrica') {
+    renderFabrica(content, (orderId) => navigateTo('pedido-detalle', { id: orderId }));
   } else if (page === 'productos-lista') {
     renderProductosLista(
       content,

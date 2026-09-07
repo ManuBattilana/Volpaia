@@ -444,6 +444,35 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     );
   `);
 
+  // Cuando al confirmar un pedido no alcanza el stock, la diferencia queda
+  // acá como "pendiente de fabricar" — en unidades sueltas, igual que
+  // stock_movements, para poder sumar recepciones parciales sin líos de
+  // conversión. quantity_received_units va subiendo con cada recepción
+  // hasta cubrir quantity_needed_units, momento en el que se marca
+  // 'completo' (y si sobró algo, ese sobrante nace como stock nuevo).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS manufacturing_pending (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      product_id INTEGER NOT NULL REFERENCES products(id),
+      presentation TEXT NOT NULL,
+      quantity_needed_units REAL NOT NULL,
+      quantity_received_units REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pendiente',
+      created_at TEXT DEFAULT (datetime('now')),
+      completed_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS manufacturing_receipts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      manufacturing_pending_id INTEGER NOT NULL REFERENCES manufacturing_pending(id) ON DELETE CASCADE,
+      quantity_units REAL NOT NULL,
+      note TEXT,
+      created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
   // Seed default user (Melany, owner role) if none exists
   const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
   if (userCount === 0) {

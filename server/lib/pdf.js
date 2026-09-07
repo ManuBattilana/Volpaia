@@ -266,4 +266,67 @@ function generatePreparationPdf(filePath, { order, items, client, seller }) {
   });
 }
 
-module.exports = { generateQuotePdf, generatePreparationPdf };
+/**
+ * PDF de fabricación pendiente: uno de dos usos —
+ * - Un pedido puntual: `rows` son los ítems pendientes de ESE pedido.
+ * - La pestaña Fábrica: `rows` puede juntar de varios pedidos a la vez;
+ *   si `groupByProduct` es true, se agrupan y sub-total por artículo (así
+ *   Darío ve "tengo que fabricar 90 docenas del artículo 1032 en total"
+ *   en vez de ir pedido por pedido).
+ * Cada fila espera: { product_code, product_description, presentation,
+ * quantity_missing, order_number, client_label }.
+ */
+function generateManufacturingPdf(doc, { title, subtitle, rows, groupByProduct }) {
+  useOwnFonts(doc);
+  drawHeader(doc, title || 'Fabricación pendiente', subtitle || '', null);
+
+  function drawRow(desc, presentation, qty, orderLabel, idx) {
+    const rowHeight = 34;
+    const y = doc.y;
+    if (idx % 2 === 1) {
+      doc.rect(PAGE_MARGIN, y, CONTENT_RIGHT - PAGE_MARGIN, rowHeight).fillColor(PINK_LIGHT).fill();
+    }
+    doc.font('Bold').fillColor('#000000').fontSize(12.5).text(desc, PAGE_MARGIN + 8, y + 6, { width: 280 });
+    if (orderLabel) {
+      doc.font('Body').fillColor(TEXT_MUTED).fontSize(10).text(orderLabel, PAGE_MARGIN + 8, y + 21, { width: 280 });
+    }
+    const badgeWidth = doc.font('Bold').fontSize(10).widthOfString(presentation) + 16;
+    doc.roundedRect(340, y + (rowHeight - 20) / 2, badgeWidth, 20, 10).fillColor(CYAN).fill();
+    doc.font('Bold').fillColor('#ffffff').fontSize(10).text(presentation, 340, y + (rowHeight - 20) / 2 + 5, { width: badgeWidth, align: 'center' });
+    doc.font('Bold').fillColor(PINK_DARK).fontSize(16).text(`x${qty}`, 0, y + (rowHeight - 16) / 2, { width: CONTENT_RIGHT - 6, align: 'right' });
+    doc.y = y + rowHeight;
+  }
+
+  if (groupByProduct) {
+    const groups = {};
+    rows.forEach(r => {
+      const key = r.product_id;
+      if (!groups[key]) groups[key] = { desc: `${r.product_code || ''} - ${r.product_description || ''}`, items: [] };
+      groups[key].items.push(r);
+    });
+    let idx = 0;
+    Object.values(groups).forEach(group => {
+      const totalsByPres = {};
+      group.items.forEach(r => { totalsByPres[r.presentation] = (totalsByPres[r.presentation] || 0) + r.quantity_missing; });
+      doc.font('Bold').fontSize(13).fillColor(PINK_DARK).text(group.desc);
+      doc.font('Body').fontSize(10.5).fillColor(TEXT_MUTED).text(
+        'Total a fabricar: ' + Object.keys(totalsByPres).map(p => `${totalsByPres[p]} ${p}`).join(' · ')
+      );
+      doc.moveDown(0.4);
+      group.items.forEach(r => {
+        drawRow(`Pedido #${r.order_number}`, r.presentation, r.quantity_missing, r.client_label, idx);
+        idx++;
+      });
+      doc.moveDown(0.6);
+    });
+  } else {
+    rows.forEach((r, idx) => {
+      drawRow(`${r.product_code || ''} - ${r.product_description || ''}`, r.presentation, r.quantity_missing, null, idx);
+    });
+  }
+
+  drawFooter(doc);
+  doc.end();
+}
+
+module.exports = { generateQuotePdf, generatePreparationPdf, generateManufacturingPdf };

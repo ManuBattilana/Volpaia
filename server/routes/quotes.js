@@ -3,6 +3,7 @@ const path = require('path');
 const { generateQuotePdf } = require('../lib/pdf');
 const { validateItems } = require('../lib/orderItems');
 const { sendPush } = require('../lib/push');
+const { applyStockOnOrderConfirm } = require('../lib/manufacturing');
 
 // Campos "de cliente" que vive en el Presupuesto — se completan a mano
 // cuando el origen es un Contacto (le faltan datos fiscales/de envío), o
@@ -242,6 +243,16 @@ module.exports = function quotesRouterFactory(db, uploadDir, orderHelpers) {
     });
 
     const orderId = tx();
+
+    // Recién acá, con el pedido ya creado (sql.js no admite transacciones
+    // anidadas, por eso esto va fuera de la de arriba): se usa el stock
+    // disponible para cubrir lo que se pueda de cada ítem, y lo que falte
+    // queda como fabricación pendiente para que Darío lo vea.
+    try {
+      applyStockOnOrderConfirm(db, orderId);
+    } catch (err) {
+      console.error('Error aplicando stock al confirmar el pedido:', err);
+    }
 
     try {
       await generatePrepPdf(orderId);

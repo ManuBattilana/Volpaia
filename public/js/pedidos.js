@@ -31,6 +31,68 @@ function orderStatusStyle(o) {
   return ORDER_STATUS_COLORS[o.status_index] || ORDER_STATUS_COLORS[0];
 }
 
+// Tarjeta de fabricación pendiente: aparece bien arriba, en naranja, cuando
+// al confirmar el pedido no alcanzó el stock para algún ítem. La cantidad
+// que falta puede cambiar con cada recepción (nunca es exacta lo que
+// vuelve del taller), así que se muestra "falta X" en vez de un check fijo.
+function drawManufacturingCard(order, pendingRows) {
+  const pending = pendingRows.filter(m => m.status !== 'completo');
+  return `
+    <div class="detail-section" id="manufacturing-card" style="border:2px solid #ef6c00;background:#fff3e0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <strong style="color:#ef6c00;">⚠ Fabricación pendiente</strong>
+        <a class="btn btn-ghost" href="/api/orders/${order.id}/manufacturing-pdf" target="_blank">Descargar PDF</a>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+        ${pending.map(m => {
+          const missingUnits = m.quantity_needed_units - m.quantity_received_units;
+          return `
+            <div style="background:var(--white);border-radius:8px;padding:10px 12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <div>
+                  <strong>${escapeHtml(m.product.code || '')} — ${escapeHtml(m.product.description || '')}</strong>
+                  <div style="font-size:12.5px;color:var(--text-muted);">Faltan ${missingUnits} unidad(es) sueltas de fabricar</div>
+                </div>
+                <button class="btn btn-primary" data-receipt-for="${m.id}">Cargar recepción</button>
+              </div>
+              <div id="receipt-form-${m.id}" hidden style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+                <div class="field-grid">
+                  <div class="field">
+                    <label>Presentación</label>
+                    <select id="receipt-presentation-${m.id}">
+                      ${m.product.sale_dozen ? '<option value="Docena">Docena</option>' : ''}
+                      ${m.product.sale_pack3 ? '<option value="Pack x3">Pack x3</option>' : ''}
+                      ${m.product.sale_unit ? '<option value="Unidad">Unidad</option>' : ''}
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Cantidad buena recibida</label>
+                    <input type="number" min="0" step="0.01" id="receipt-quantity-${m.id}">
+                  </div>
+                  <div class="field full">
+                    <label>Nota (opcional)</label>
+                    <input type="text" id="receipt-note-${m.id}" placeholder="Ej: quedaron 5 falladas">
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:10px;">
+                  <button class="btn btn-primary" data-save-receipt="${m.id}">Guardar</button>
+                  <button class="btn btn-ghost" data-cancel-receipt="${m.id}">Cancelar</button>
+                </div>
+                <div id="receipt-msg-${m.id}" style="margin-top:8px;font-size:12.5px;color:var(--danger);"></div>
+              </div>
+              ${m.receipts.length > 0 ? `
+                <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">
+                  ${m.receipts.map(r => `Recibido: ${Math.abs(r.quantity_units)} unid. el ${stockMovementDate(r.created_at)}${r.note ? ' — ' + escapeHtml(r.note) : ''}`).join('<br>')}
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
 // Tarjeta de método de envío: aparece desde "En preparación" en adelante —
 // Darío la necesita para saber qué rótulo armar. Se puede editar mientras
 // el pedido está en preparación o listo para despachar (por si el cliente
@@ -198,8 +260,14 @@ function amountsMismatch(order) {
 
 async function renderPedidoDetail(container, orderId, currentUser, onBack) {
   let order = await Api.get(`/api/orders/${orderId}`);
+  let manufacturingPending = await Api.get(`/api/orders/${orderId}/manufacturing`).catch(() => []);
   let editingItems = false;
   const editState = { items: [], notes: '' };
+
+  async function reloadManufacturing() {
+    manufacturingPending = await Api.get(`/api/orders/${orderId}/manufacturing`).catch(() => []);
+    draw();
+  }
 
   function startEditing() {
     editState.items = order.items.map(it => ({
@@ -245,6 +313,8 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
           <button class="btn btn-danger" id="btn-cancel-order">Cancelar pedido</button>
         </div>
       </div>
+
+      ${manufacturingPending.some(m => m.status !== 'completo') ? drawManufacturingCard(order, manufacturingPending) : ''}
 
       ${amountsMismatch(order) ? `
         <div class="detail-section" style="border:2px solid #ef6c00;background:#fff3e0;">
@@ -353,6 +423,33 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
 
     const viewPrepPdfBtn = document.getElementById('btn-view-prep-pdf');
     if (viewPrepPdfBtn) viewPrepPdfBtn.addEventListener('click', () => openPdfPreview(order.preparation_pdf_path, `preparacion-${order.order_number}.pdf`));
+
+    container.querySelectorAll('[data-receipt-for]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById(`receipt-form-${btn.dataset.receiptFor}`).hidden = false;
+      });
+    });
+    container.querySelectorAll('[data-cancel-receipt]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById(`receipt-form-${btn.dataset.cancelReceipt}`).hidden = true;
+      });
+    });
+    container.querySelectorAll('[data-save-receipt]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.saveReceipt;
+        const presentation = document.getElementById(`receipt-presentation-${id}`).value;
+        const quantity = document.getElementById(`receipt-quantity-${id}`).value;
+        const note = document.getElementById(`receipt-note-${id}`).value.trim();
+        const msg = document.getElementById(`receipt-msg-${id}`);
+        if (!quantity || Number(quantity) <= 0) { msg.textContent = 'Falta la cantidad'; return; }
+        try {
+          await Api.post(`/api/orders/manufacturing/${id}/receipt`, { presentation, quantity, note });
+          await reloadManufacturing();
+        } catch (err) {
+          msg.textContent = err.message;
+        }
+      });
+    });
 
     const editShippingBtn = document.getElementById('btn-edit-shipping');
     if (editShippingBtn) {

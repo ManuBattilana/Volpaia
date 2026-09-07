@@ -7,6 +7,7 @@ const MENU_ITEMS = [
   { key: 'clientes', label: 'Clientes', enabled: true },
   { key: 'productos', label: 'Productos', enabled: true },
   { key: 'stock', label: 'Stock', enabled: true },
+  { key: 'fabrica', label: 'Fábrica', enabled: true },
   { key: 'presupuestos', label: 'Presupuestos', enabled: true },
   { key: 'pedidos', label: 'Pedidos', enabled: true },
   { key: 'posventa', label: 'Posventa', enabled: true },
