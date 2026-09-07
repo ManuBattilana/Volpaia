@@ -835,6 +835,49 @@ a { color: var(--pink-dark); }
 .attachment-chip:hover { background: var(--white); border-color: var(--pink-dark); }
 .attachment-chip svg { flex-shrink: 0; }
 
+.attachments-grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  cursor: pointer;
+  text-align: left;
+}
+.attachment-card:hover { border-color: var(--pink-dark); background: var(--pink-light); }
+.attachment-card-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--pink-light);
+  color: var(--pink-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.attachment-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.attachment-card-text strong { color: var(--pink-dark); font-size: 14px; }
+.attachment-card-hint { font-size: 12px; color: var(--text-muted); }
+
+.prep-callout {
+  border: 2px solid var(--cyan);
+  background: #e6f7f8;
+}
+.prep-callout h3 { color: var(--cyan); }
+.prep-callout p { font-size: 13.5px; color: var(--text-muted); margin: 8px 0 14px; }
+
 /* ---------- Chat interno ---------- */
 .chat-box {
   display: flex;

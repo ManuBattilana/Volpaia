@@ -1,9 +1,8 @@
 // Presupuestos: paso previo a todo pedido. Se arma con los mismos datos
 // "de cliente" que hoy tiene un Cliente (completando lo que falte si el
 // origen es un Contacto), más los productos con precios. El PDF que se
-// genera acá es el que se le manda a Damián — con la leyenda "Factura X"
-// y todo — y es el mismo PDF que después queda colgado del Pedido cuando
-// el presupuesto se confirma.
+// genera acá es el que se le manda a Damián, y es el mismo PDF que
+// después queda colgado del Pedido cuando el presupuesto se confirma.
 
 const QUOTE_PERSON_FIELDS = [
   'first_name', 'last_name', 'business_name',
@@ -13,6 +12,104 @@ const QUOTE_PERSON_FIELDS = [
 ];
 
 const QuotesState = { search: '', status: '' };
+
+// Grilla de ítems reutilizable entre el formulario de creación y la edición
+// de un presupuesto Pendiente: dibuja las filas, calcula subtotales/total en
+// vivo y deja agregar/quitar productos. `items` es el array que se muta en
+// el lugar; `draw()` se llama después de agregar/quitar un producto.
+function setupItemsGrid(bodyEl, totalEl, items) {
+  function updateTotals() {
+    items.forEach((it, idx) => {
+      const row = bodyEl.querySelector(`tr[data-idx="${idx}"]`);
+      if (!row) return;
+      const subtotal = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
+      row.querySelector('[data-label="Subtotal"]').textContent = formatMoney(subtotal);
+    });
+    const total = items.reduce((sum, it) => sum + (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0), 0);
+    if (totalEl) totalEl.textContent = 'Total: ' + formatMoney(total);
+  }
+
+  function draw() {
+    bodyEl.innerHTML = items.map((it, idx) => {
+      const allowed = allowedPresentations(it.product);
+      const subtotal = it.unitPrice * it.quantity;
+      return `
+        <tr data-idx="${idx}" style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 4px;" data-label="Producto">${escapeHtml(it.product.code || '')}</td>
+          <td style="padding:8px 4px;" data-label="Presentación">
+            <select data-role="presentation" style="padding:6px;border-radius:6px;border:1px solid var(--border);">
+              ${allowed.map(p => `<option value="${p.key}" ${p.key === it.presentation ? 'selected' : ''}>${p.key}</option>`).join('')}
+            </select>
+          </td>
+          <td style="padding:8px 4px;" data-label="Cantidad"><input type="number" min="0" step="1" data-role="quantity" value="${it.quantity}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
+          <td style="padding:8px 4px;" data-label="Precio unit."><input type="number" min="0" step="0.01" data-role="price" value="${it.unitPrice}" style="width:100px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
+          <td style="padding:8px 4px;font-weight:600;" data-label="Subtotal">${formatMoney(subtotal)}</td>
+          <td style="padding:8px 4px;"><button class="btn btn-danger" data-role="remove" style="padding:4px 10px;font-size:12px;">Quitar</button></td>
+        </tr>
+      `;
+    }).join('');
+
+    bodyEl.querySelectorAll('tr').forEach(row => {
+      const idx = Number(row.dataset.idx);
+      row.querySelector('[data-role="presentation"]').addEventListener('change', (e) => {
+        const pres = PRESENTATIONS.find(p => p.key === e.target.value);
+        items[idx].presentation = e.target.value;
+        items[idx].unitPrice = items[idx].product[pres.priceField];
+        draw();
+      });
+      row.querySelector('[data-role="quantity"]').addEventListener('input', (e) => {
+        items[idx].quantity = e.target.value === '' ? '' : Number(e.target.value);
+        updateTotals();
+      });
+      row.querySelector('[data-role="quantity"]').addEventListener('blur', (e) => {
+        if (!items[idx].quantity || items[idx].quantity <= 0) { items[idx].quantity = 1; e.target.value = 1; updateTotals(); }
+      });
+      row.querySelector('[data-role="price"]').addEventListener('input', (e) => {
+        items[idx].unitPrice = e.target.value === '' ? '' : Number(e.target.value);
+        updateTotals();
+      });
+      row.querySelector('[data-role="price"]').addEventListener('blur', (e) => {
+        if (items[idx].unitPrice === '' || items[idx].unitPrice === null || isNaN(items[idx].unitPrice)) { items[idx].unitPrice = 0; e.target.value = 0; updateTotals(); }
+      });
+      row.querySelector('[data-role="remove"]').addEventListener('click', () => { items.splice(idx, 1); draw(); });
+    });
+
+    updateTotals();
+  }
+
+  draw();
+  return { draw };
+}
+
+// Buscador de productos reutilizable: agrega a `items` y vuelve a dibujar
+// la grilla con `grid.draw()`.
+function setupProductSearch(inputEl, resultsEl, items, grid) {
+  let timer;
+  inputEl.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const q = inputEl.value.trim();
+      if (!q) { resultsEl.innerHTML = ''; return; }
+      const results = await Api.get('/api/products?q=' + encodeURIComponent(q));
+      resultsEl.innerHTML = results.slice(0, 8).map(p => `
+        <div class="product-list-row" data-product-id="${p.id}" style="padding:8px 12px;margin-bottom:4px;">
+          <div class="info"><strong>${escapeHtml(p.code || 'Sin código')}</strong> — ${escapeHtml(p.description || '')}</div>
+        </div>
+      `).join('') || '<div class="empty-state" style="padding:12px;">Sin resultados</div>';
+      resultsEl.querySelectorAll('[data-product-id]').forEach(el => {
+        el.addEventListener('click', () => {
+          const p = results.find(r => r.id === Number(el.dataset.productId));
+          const allowed = allowedPresentations(p);
+          if (allowed.length === 0) { alert(`El producto ${p.code} no tiene ninguna presentación de venta habilitada.`); return; }
+          items.push({ product: p, presentation: allowed[0].key, quantity: 0, unitPrice: p[allowed[0].priceField] });
+          grid.draw();
+          resultsEl.innerHTML = '';
+          inputEl.value = '';
+        });
+      });
+    }, 250);
+  });
+}
 
 async function renderPresupuestosList(container, onOpen, onNew) {
   container.innerHTML = `
@@ -87,6 +184,34 @@ function quoteRow(q) {
   `;
 }
 
+function personFieldsGrid(person, idPrefix) {
+  return `
+    <div class="field-grid">
+      <div class="field"><label>Nombre</label><input type="text" id="${idPrefix}first_name" class="text-input" value="${escapeHtml(person.first_name || '')}"></div>
+      <div class="field"><label>Apellido</label><input type="text" id="${idPrefix}last_name" class="text-input" value="${escapeHtml(person.last_name || '')}"></div>
+      <div class="field"><label>Emprendimiento</label><input type="text" id="${idPrefix}business_name" class="text-input" value="${escapeHtml(person.business_name || '')}"></div>
+      <div class="field"><label>Razón social</label><input type="text" id="${idPrefix}fiscal_name" class="text-input" value="${escapeHtml(person.fiscal_name || '')}"></div>
+      <div class="field"><label>DNI/CUIT</label><input type="text" id="${idPrefix}fiscal_id" class="text-input" value="${escapeHtml(person.fiscal_id || '')}"></div>
+      <div class="field"><label>Teléfono</label><input type="text" id="${idPrefix}phone" class="text-input" value="${escapeHtml(person.phone || '')}"></div>
+      <div class="field"><label>Email</label><input type="email" id="${idPrefix}email" class="text-input" value="${escapeHtml(person.email || '')}"></div>
+      <div class="field"><label>Dirección</label><input type="text" id="${idPrefix}address" class="text-input" value="${escapeHtml(person.address || '')}"></div>
+      <div class="field"><label>Localidad</label><input type="text" id="${idPrefix}locality" class="text-input" value="${escapeHtml(person.locality || '')}"></div>
+      <div class="field"><label>Código postal</label><input type="text" id="${idPrefix}postal_code" class="text-input" value="${escapeHtml(person.postal_code || '')}"></div>
+      <div class="field"><label>Provincia</label><input type="text" id="${idPrefix}province" class="text-input" value="${escapeHtml(person.province || '')}"></div>
+      <div class="field">
+        <label>Tipo de envío</label>
+        <select id="${idPrefix}shipping_type">
+          <option value="">—</option>
+          <option value="Domicilio" ${person.shipping_type === 'Domicilio' ? 'selected' : ''}>Domicilio</option>
+          <option value="Sucursal" ${person.shipping_type === 'Sucursal' ? 'selected' : ''}>Sucursal</option>
+        </select>
+      </div>
+      <div class="field"><label>Transporte habitual</label><input type="text" id="${idPrefix}shipping_carrier" class="text-input" value="${escapeHtml(person.shipping_carrier || '')}"></div>
+      <div class="field full"><label>Dirección de envío</label><input type="text" id="${idPrefix}shipping_address" class="text-input" value="${escapeHtml(person.shipping_address || '')}"></div>
+    </div>
+  `;
+}
+
 // `preset` opcional: { type: 'contact'|'client', record } cuando se llega
 // desde el botón "Nuevo presupuesto" de un Contacto o Cliente puntual —
 // en ese caso se salta el buscador y arranca directo con esos datos.
@@ -94,6 +219,7 @@ async function renderPresupuestoForm(container, onBack, onCreated, preset) {
   let source = preset ? preset.type : null;
   let sourceRecord = preset ? preset.record : null;
   const items = [];
+  let grid = null;
 
   function personFieldsFromSource() {
     if (!sourceRecord) return {};
@@ -138,29 +264,7 @@ async function renderPresupuestoForm(container, onBack, onCreated, preset) {
       ${sourceRecord ? `
         <div class="detail-section">
           <h3>Datos del cliente</h3>
-          <div class="field-grid">
-            <div class="field"><label>Nombre</label><input type="text" id="pf-first_name" class="text-input" value="${escapeHtml(person.first_name || '')}"></div>
-            <div class="field"><label>Apellido</label><input type="text" id="pf-last_name" class="text-input" value="${escapeHtml(person.last_name || '')}"></div>
-            <div class="field"><label>Emprendimiento</label><input type="text" id="pf-business_name" class="text-input" value="${escapeHtml(person.business_name || '')}"></div>
-            <div class="field"><label>Razón social</label><input type="text" id="pf-fiscal_name" class="text-input" value="${escapeHtml(person.fiscal_name || '')}"></div>
-            <div class="field"><label>DNI/CUIT</label><input type="text" id="pf-fiscal_id" class="text-input" value="${escapeHtml(person.fiscal_id || '')}"></div>
-            <div class="field"><label>Teléfono</label><input type="text" id="pf-phone" class="text-input" value="${escapeHtml(person.phone || '')}"></div>
-            <div class="field"><label>Email</label><input type="email" id="pf-email" class="text-input" value="${escapeHtml(person.email || '')}"></div>
-            <div class="field"><label>Dirección</label><input type="text" id="pf-address" class="text-input" value="${escapeHtml(person.address || '')}"></div>
-            <div class="field"><label>Localidad</label><input type="text" id="pf-locality" class="text-input" value="${escapeHtml(person.locality || '')}"></div>
-            <div class="field"><label>Código postal</label><input type="text" id="pf-postal_code" class="text-input" value="${escapeHtml(person.postal_code || '')}"></div>
-            <div class="field"><label>Provincia</label><input type="text" id="pf-province" class="text-input" value="${escapeHtml(person.province || '')}"></div>
-            <div class="field">
-              <label>Tipo de envío</label>
-              <select id="pf-shipping_type">
-                <option value="">—</option>
-                <option value="Domicilio" ${person.shipping_type === 'Domicilio' ? 'selected' : ''}>Domicilio</option>
-                <option value="Sucursal" ${person.shipping_type === 'Sucursal' ? 'selected' : ''}>Sucursal</option>
-              </select>
-            </div>
-            <div class="field"><label>Transporte habitual</label><input type="text" id="pf-shipping_carrier" class="text-input" value="${escapeHtml(person.shipping_carrier || '')}"></div>
-            <div class="field full"><label>Dirección de envío</label><input type="text" id="pf-shipping_address" class="text-input" value="${escapeHtml(person.shipping_address || '')}"></div>
-          </div>
+          ${personFieldsGrid(person, 'pf-')}
         </div>
 
         <div class="detail-section">
@@ -232,95 +336,8 @@ async function renderPresupuestoForm(container, onBack, onCreated, preset) {
 
     if (!sourceRecord) return;
 
-    const productSearch = document.getElementById('product-search');
-    let prodTimer;
-    productSearch.addEventListener('input', () => {
-      clearTimeout(prodTimer);
-      prodTimer = setTimeout(async () => {
-        const q = productSearch.value.trim();
-        if (!q) { document.getElementById('product-results').innerHTML = ''; return; }
-        const results = await Api.get('/api/products?q=' + encodeURIComponent(q));
-        const resultsEl = document.getElementById('product-results');
-        resultsEl.innerHTML = results.slice(0, 8).map(p => `
-          <div class="product-list-row" data-product-id="${p.id}" style="padding:8px 12px;margin-bottom:4px;">
-            <div class="info"><strong>${escapeHtml(p.code || 'Sin código')}</strong> — ${escapeHtml(p.description || '')}</div>
-          </div>
-        `).join('') || '<div class="empty-state" style="padding:12px;">Sin resultados</div>';
-        resultsEl.querySelectorAll('[data-product-id]').forEach(el => {
-          el.addEventListener('click', () => {
-            const p = results.find(r => r.id === Number(el.dataset.productId));
-            const allowed = allowedPresentations(p);
-            if (allowed.length === 0) { alert(`El producto ${p.code} no tiene ninguna presentación de venta habilitada.`); return; }
-            items.push({ product: p, presentation: allowed[0].key, quantity: 0, unitPrice: p[allowed[0].priceField] });
-            drawItems();
-            resultsEl.innerHTML = '';
-            productSearch.value = '';
-          });
-        });
-      }, 250);
-    });
-
-    function updateItemsTotals() {
-      const body = document.getElementById('items-body');
-      items.forEach((it, idx) => {
-        const row = body.querySelector(`tr[data-idx="${idx}"]`);
-        if (!row) return;
-        const subtotal = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
-        row.querySelector('[data-label="Subtotal"]').textContent = formatMoney(subtotal);
-      });
-      const total = items.reduce((sum, it) => sum + (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0), 0);
-      document.getElementById('items-total').textContent = 'Total: ' + formatMoney(total);
-    }
-
-    function drawItems() {
-      const body = document.getElementById('items-body');
-      body.innerHTML = items.map((it, idx) => {
-        const allowed = allowedPresentations(it.product);
-        const subtotal = it.unitPrice * it.quantity;
-        return `
-          <tr data-idx="${idx}" style="border-bottom:1px solid var(--border);">
-            <td style="padding:8px 4px;" data-label="Producto">${escapeHtml(it.product.code || '')}</td>
-            <td style="padding:8px 4px;" data-label="Presentación">
-              <select data-role="presentation" style="padding:6px;border-radius:6px;border:1px solid var(--border);">
-                ${allowed.map(p => `<option value="${p.key}" ${p.key === it.presentation ? 'selected' : ''}>${p.key}</option>`).join('')}
-              </select>
-            </td>
-            <td style="padding:8px 4px;" data-label="Cantidad"><input type="number" min="0" step="1" data-role="quantity" value="${it.quantity}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
-            <td style="padding:8px 4px;" data-label="Precio unit."><input type="number" min="0" step="0.01" data-role="price" value="${it.unitPrice}" style="width:100px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
-            <td style="padding:8px 4px;font-weight:600;" data-label="Subtotal">${formatMoney(subtotal)}</td>
-            <td style="padding:8px 4px;"><button class="btn btn-danger" data-role="remove" style="padding:4px 10px;font-size:12px;">Quitar</button></td>
-          </tr>
-        `;
-      }).join('');
-
-      body.querySelectorAll('tr').forEach(row => {
-        const idx = Number(row.dataset.idx);
-        row.querySelector('[data-role="presentation"]').addEventListener('change', (e) => {
-          const pres = PRESENTATIONS.find(p => p.key === e.target.value);
-          items[idx].presentation = e.target.value;
-          items[idx].unitPrice = items[idx].product[pres.priceField];
-          drawItems();
-        });
-        row.querySelector('[data-role="quantity"]').addEventListener('input', (e) => {
-          items[idx].quantity = e.target.value === '' ? '' : Number(e.target.value);
-          updateItemsTotals();
-        });
-        row.querySelector('[data-role="quantity"]').addEventListener('blur', (e) => {
-          if (!items[idx].quantity || items[idx].quantity <= 0) { items[idx].quantity = 1; e.target.value = 1; updateItemsTotals(); }
-        });
-        row.querySelector('[data-role="price"]').addEventListener('input', (e) => {
-          items[idx].unitPrice = e.target.value === '' ? '' : Number(e.target.value);
-          updateItemsTotals();
-        });
-        row.querySelector('[data-role="price"]').addEventListener('blur', (e) => {
-          if (items[idx].unitPrice === '' || items[idx].unitPrice === null || isNaN(items[idx].unitPrice)) { items[idx].unitPrice = 0; e.target.value = 0; updateItemsTotals(); }
-        });
-        row.querySelector('[data-role="remove"]').addEventListener('click', () => { items.splice(idx, 1); drawItems(); });
-      });
-
-      updateItemsTotals();
-    }
-    drawItems();
+    grid = setupItemsGrid(document.getElementById('items-body'), document.getElementById('items-total'), items);
+    setupProductSearch(document.getElementById('product-search'), document.getElementById('product-results'), items, grid);
 
     document.getElementById('btn-save-quote').addEventListener('click', async () => {
       if (items.length === 0) { alert('Agregá al menos un producto'); return; }
@@ -342,8 +359,14 @@ async function renderPresupuestoForm(container, onBack, onCreated, preset) {
 
 async function renderPresupuestoDetail(container, quoteId, onBack, onConfirmed) {
   let quote = await Api.get(`/api/quotes/${quoteId}`);
+  let items = [];
 
   function draw() {
+    if (quote.status === 'Pendiente') return drawEditable();
+    return drawReadOnly();
+  }
+
+  function drawReadOnly() {
     const name = [quote.first_name, quote.last_name].filter(Boolean).join(' ');
     const badgeColors = { Pendiente: '#ef6c00', Confirmado: '#2e7d32', Rechazado: 'var(--danger)' };
 
@@ -401,17 +424,6 @@ async function renderPresupuestoDetail(container, quoteId, onBack, onConfirmed) 
         ${quote.notes ? `<div style="margin-top:14px;"><label style="font-size:12px;color:var(--text-muted);font-weight:600;">Notas</label><div>${escapeHtml(quote.notes).replace(/\n/g, '<br>')}</div></div>` : ''}
       </div>
 
-      ${quote.status === 'Pendiente' ? `
-        <div class="detail-section">
-          <h3>¿El cliente aceptó?</h3>
-          <p style="font-size:13px;color:var(--text-muted);">Al confirmar se crea el cliente (si hace falta) y nace el pedido, ya listo para mandar a facturación.</p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <button class="btn btn-primary" id="btn-confirm-quote">Confirmar presupuesto</button>
-            <button class="btn btn-danger" id="btn-reject-quote">Rechazar</button>
-          </div>
-        </div>
-      ` : ''}
-
       ${quote.status === 'Confirmado' && quote.converted_order_id ? `
         <div class="detail-section" style="border:2px solid #2e7d32;background:#e6f7e8;">
           Este presupuesto se confirmó y generó el pedido #${quote.converted_order_id}.
@@ -427,40 +439,120 @@ async function renderPresupuestoDetail(container, quoteId, onBack, onConfirmed) 
 
     const goOrderBtn = document.getElementById('btn-go-order');
     if (goOrderBtn) goOrderBtn.addEventListener('click', () => onConfirmed(quote.converted_order_id));
+  }
 
-    const confirmBtn = document.getElementById('btn-confirm-quote');
-    if (confirmBtn) {
-      confirmBtn.addEventListener('click', () => {
-        confirmModal({
-          title: 'Confirmar presupuesto',
-          message: `¿El cliente aceptó el presupuesto #${quote.quote_number}? Se va a crear el pedido.`,
-          confirmLabel: 'Confirmar',
-          onConfirm: async () => {
-            try {
-              const result = await Api.post(`/api/quotes/${quote.id}/confirm`);
-              onConfirmed(result.order_id);
-            } catch (err) {
-              alert(err.message);
-            }
-          }
-        });
-      });
-    }
+  function drawEditable() {
+    items = quote.items.map(it => ({
+      product: { id: it.product_id, code: it.product_code, description: it.product_description },
+      presentation: it.presentation,
+      quantity: it.quantity,
+      unitPrice: it.unit_price,
+    }));
+    const phoneDigits = (quote.phone || '').replace(/[^0-9]/g, '');
+    const name = [quote.first_name, quote.last_name].filter(Boolean).join(' ');
 
-    const rejectBtn = document.getElementById('btn-reject-quote');
-    if (rejectBtn) {
-      rejectBtn.addEventListener('click', () => {
-        confirmModal({
-          title: 'Rechazar presupuesto',
-          message: `¿Seguro que el cliente no aceptó el presupuesto #${quote.quote_number}?`,
-          confirmLabel: 'Rechazar',
-          onConfirm: async () => {
-            quote = await Api.post(`/api/quotes/${quote.id}/reject`);
-            draw();
+    container.innerHTML = `
+      <button class="btn btn-secondary" id="btn-back" style="margin-bottom:16px;">← Volver</button>
+      <div class="detail-header">
+        <div class="detail-title">
+          <div class="eyebrow" style="color:#ef6c00;">PRESUPUESTO #${quote.quote_number} · PENDIENTE</div>
+          <h1>${escapeHtml(name)}${quote.business_name ? ' — ' + escapeHtml(quote.business_name) : ''}</h1>
+        </div>
+        <div class="detail-actions">
+          ${phoneDigits ? `<a class="whatsapp-btn-large" href="https://wa.me/${phoneDigits}" target="_blank">${WhatsappIcon} WhatsApp</a>` : ''}
+          ${quote.pdf_path ? `<button class="btn btn-secondary" id="btn-view-pdf">Ver PDF</button>` : ''}
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <h3>Datos del cliente</h3>
+        ${personFieldsGrid(quote, 'qf-')}
+      </div>
+
+      <div class="detail-section">
+        <h3>Productos</h3>
+        <input type="text" id="product-search" class="text-input" placeholder="Buscar producto por código o descripción...">
+        <div id="product-results" style="margin-top:8px;"></div>
+        <table style="width:100%;border-collapse:collapse;margin-top:16px;" class="items-table-responsive">
+          <thead>
+            <tr style="text-align:left;border-bottom:2px solid var(--border);">
+              <th style="padding:8px 4px;">Producto</th>
+              <th style="padding:8px 4px;">Presentación</th>
+              <th style="padding:8px 4px;">Cantidad</th>
+              <th style="padding:8px 4px;">Precio unit.</th>
+              <th style="padding:8px 4px;">Subtotal</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="items-body"></tbody>
+        </table>
+        <div style="text-align:right;font-weight:700;color:var(--pink-dark);margin-top:10px;font-size:16px;" id="items-total"></div>
+      </div>
+
+      <div class="detail-section">
+        <h3>Notas</h3>
+        <textarea id="quote-notes" rows="3" style="width:100%;padding:10px;border-radius:7px;border:1px solid var(--border);background:var(--pink-light);font-family:inherit;">${escapeHtml(quote.notes || '')}</textarea>
+      </div>
+
+      <button class="btn btn-secondary" id="btn-save-quote">Guardar cambios</button>
+
+      <div class="detail-section" style="margin-top:20px;">
+        <h3>¿El cliente aceptó?</h3>
+        <p style="font-size:13px;color:var(--text-muted);">Al confirmar se crea el cliente (si hace falta) y nace el pedido, ya listo para mandar a facturación.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="btn-confirm-quote">Confirmar presupuesto</button>
+          <button class="btn btn-danger" id="btn-reject-quote">Rechazar</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-back').addEventListener('click', onBack);
+
+    const viewPdfBtn = document.getElementById('btn-view-pdf');
+    if (viewPdfBtn) viewPdfBtn.addEventListener('click', () => openPdfPreview(quote.pdf_path, `presupuesto-${quote.quote_number}.pdf`));
+
+    const grid = setupItemsGrid(document.getElementById('items-body'), document.getElementById('items-total'), items);
+    setupProductSearch(document.getElementById('product-search'), document.getElementById('product-results'), items, grid);
+
+    document.getElementById('btn-save-quote').addEventListener('click', async () => {
+      if (items.length === 0) { alert('El presupuesto necesita al menos un producto'); return; }
+      const payload = { notes: document.getElementById('quote-notes').value, items: items.map(it => ({ product_id: it.product.id, presentation: it.presentation, quantity: it.quantity, unit_price: it.unitPrice })) };
+      QUOTE_PERSON_FIELDS.forEach(f => { payload[f] = document.getElementById(`qf-${f}`).value; });
+      try {
+        quote = await Api.put(`/api/quotes/${quote.id}`, payload);
+        draw();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    document.getElementById('btn-confirm-quote').addEventListener('click', () => {
+      confirmModal({
+        title: 'Confirmar presupuesto',
+        message: `¿El cliente aceptó el presupuesto #${quote.quote_number}? Se va a crear el pedido.`,
+        confirmLabel: 'Confirmar',
+        onConfirm: async () => {
+          try {
+            const result = await Api.post(`/api/quotes/${quote.id}/confirm`);
+            onConfirmed(result.order_id);
+          } catch (err) {
+            alert(err.message);
           }
-        });
+        }
       });
-    }
+    });
+
+    document.getElementById('btn-reject-quote').addEventListener('click', () => {
+      confirmModal({
+        title: 'Rechazar presupuesto',
+        message: `¿Seguro que el cliente no aceptó el presupuesto #${quote.quote_number}?`,
+        confirmLabel: 'Rechazar',
+        onConfirm: async () => {
+          quote = await Api.post(`/api/quotes/${quote.id}/reject`);
+          draw();
+        }
+      });
+    });
   }
 
   draw();

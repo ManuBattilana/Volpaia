@@ -30,14 +30,20 @@ function isPdfUrl(url) { return /\.pdf(\?|$)/i.test(url || ''); }
 // Junta en un solo lugar todos los comprobantes que se van adjuntando a lo
 // largo del flujo del pedido (Presupuesto, Factura X, pago, envío), para
 // que se puedan ver siempre desde la sección "Archivos" sin depender de en
-// qué paso está el pedido ahora mismo.
+// qué paso está el pedido ahora mismo. El PDF de preparación se suma a esta
+// lista recién cuando el pedido avanza más allá del primer paso — mientras
+// está en "Pedido confirmado" tiene su propio bloque bien visible, porque
+// es el que Darío necesita usar de entrada.
 function orderAttachments(order) {
   const list = [
-    { label: 'Presupuesto', url: order.order_pdf_path },
-    { label: 'Factura X', url: order.invoice_attachment_url },
-    { label: 'Comprobante de pago', url: order.payment_attachment_url },
-    { label: 'Foto/comprobante de envío', url: order.shipping_proof_photo },
+    { label: 'Presupuesto', hint: 'Con precios — para mandarle a Damián por WhatsApp', url: order.order_pdf_path },
+    { label: 'Factura X', hint: 'La que te mandó Damián', url: order.invoice_attachment_url },
+    { label: 'Comprobante de pago', hint: 'El que mandó el cliente', url: order.payment_attachment_url },
+    { label: 'Comprobante de envío', hint: '', url: order.shipping_proof_photo },
   ];
+  if (order.status_index > 0) {
+    list.push({ label: 'PDF de preparación', hint: 'Sin precios — para armar el pedido', url: order.preparation_pdf_path });
+  }
   return list.filter(a => a.url).map(a => ({ ...a, isPdf: isPdfUrl(a.url) }));
 }
 
@@ -183,15 +189,26 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       ${orderAttachments(order).length || order.cbu ? `
         <div class="detail-section">
           <h3>Archivos</h3>
-          <div class="attachments-grid">
+          <div class="attachments-grid attachments-grid-cards">
             ${orderAttachments(order).map(a => `
-              <button class="attachment-chip" data-url="${a.url}" data-label="${escapeHtml(a.label)}">
-                ${a.isPdf ? PdfFileIcon : ImageFileIcon}
-                <span>${escapeHtml(a.label)}</span>
+              <button class="attachment-card" data-url="${a.url}" data-label="${escapeHtml(a.label)}">
+                <span class="attachment-card-icon">${a.isPdf ? PdfFileIcon : ImageFileIcon}</span>
+                <span class="attachment-card-text">
+                  <strong>${escapeHtml(a.label)}</strong>
+                  ${a.hint ? `<span class="attachment-card-hint">${escapeHtml(a.hint)}</span>` : ''}
+                </span>
               </button>
             `).join('')}
           </div>
-          ${order.cbu ? `<div style="margin-top:10px;font-size:13.5px;"><strong>CBU:</strong> ${escapeHtml(order.cbu)}</div>` : ''}
+          ${order.cbu ? `<div class="detail-section" style="margin-top:14px;background:var(--pink-light);"><strong>Datos para transferir</strong><div style="white-space:pre-wrap;margin-top:6px;font-size:13.5px;">${escapeHtml(order.cbu)}</div></div>` : ''}
+        </div>
+      ` : ''}
+
+      ${order.status_index === 0 && order.preparation_pdf_path ? `
+        <div class="detail-section prep-callout">
+          <h3>📋 PDF para preparación</h3>
+          <p>Descargalo (o abrilo en el celular) para armar el pedido: tiene los productos y las cantidades, sin precios.</p>
+          <button class="btn btn-primary" id="btn-view-prep-pdf">Descargar PDF para preparación</button>
         </div>
       ` : ''}
 
@@ -225,13 +242,6 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         ${order.notes ? `<div style="margin-top:14px;"><label style="font-size:12px;color:var(--text-muted);font-weight:600;">Notas</label><div>${escapeHtml(order.notes).replace(/\n/g, '<br>')}</div></div>` : ''}
       </div>
 
-      ${order.preparation_pdf_path ? `
-        <div class="detail-section">
-          <h3>Preparación</h3>
-          <button class="btn btn-secondary" id="btn-view-prep-pdf">Ver lista de preparación</button>
-        </div>
-      ` : ''}
-
       ${order.commission ? `
         <div class="detail-section">
           <h3>Comisión</h3>
@@ -262,7 +272,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
 
     document.getElementById('btn-back').addEventListener('click', onBack);
 
-    container.querySelectorAll('.attachment-chip').forEach(btn => {
+    container.querySelectorAll('.attachment-card').forEach(btn => {
       btn.addEventListener('click', () => openAttachment(btn.dataset.url, btn.dataset.label));
     });
 
@@ -464,6 +474,23 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
     return res.url;
   }
 
+  // Si el monto que se está por cargar no coincide con el monto calculado
+  // del pedido, para y pregunta antes de mandarlo — así un error de tipeo
+  // no queda guardado sin darse cuenta (antes solo se veía un cartel de
+  // aviso arriba, pero dejaba seguir igual).
+  function proceedWithAmountCheck(amount, proceedFn) {
+    if (amount === '' || amount === undefined || amount === null) { proceedFn(); return; }
+    const entered = Math.round(Number(amount) * 100);
+    const calculated = Math.round(Number(order.calculated_amount) * 100);
+    if (isNaN(entered) || entered === calculated) { proceedFn(); return; }
+    confirmModal({
+      title: 'Los montos no coinciden',
+      message: `Ingresaste ${formatMoney(amount)}, pero el monto calculado del pedido es ${formatMoney(order.calculated_amount)}. ¿Confirmás que está bien así (por ejemplo, un pago parcial) o preferís cancelar y corregirlo?`,
+      confirmLabel: 'Confirmar igual',
+      onConfirm: proceedFn,
+    });
+  }
+
   function drawStepSection(nextIndex) {
     const el = document.getElementById('step-section');
 
@@ -472,7 +499,11 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       // falta mandarlo a facturación.
       el.innerHTML = `
         <h3>Pedido confirmado</h3>
-        <p style="font-size:13px;color:var(--text-muted);">Cuando esté todo en orden, mandalo a facturación para que Damián genere la Factura X.</p>
+        <p style="font-size:13px;color:var(--text-muted);">
+          Descargá el <strong>Presupuesto</strong> (arriba, en Archivos) y mandáselo a Damián por WhatsApp para que genere la Factura X.
+          Descargá también el <strong>PDF para preparación</strong> para ir armando el pedido.
+          Cuando esté todo en orden, mandalo a facturación.
+        </p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-secondary" id="btn-whatsapp-damian">WhatsApp a Damián</button>
           <button class="btn btn-primary" id="btn-advance">Enviar a facturación</button>
@@ -501,10 +532,14 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
     if (order.status_index === 1) {
       el.innerHTML = `
         <h3>Enviar a facturación</h3>
+        <p style="font-size:13px;color:var(--text-muted);">Adjuntá la Factura X, los datos para transferir y el monto de la factura.</p>
         <div class="field-grid">
           <div class="field"><label>Factura X (foto o PDF)</label><input type="file" id="field-invoice" accept="image/*,application/pdf"></div>
-          <div class="field"><label>CBU</label><input type="text" id="field-cbu" class="text-input"></div>
           <div class="field"><label>Monto de la Factura X</label><input type="number" step="0.01" id="field-amount-invoice"></div>
+          <div class="field full">
+            <label>Datos para transferir</label>
+            <textarea id="field-cbu" rows="3" class="text-input" style="width:100%;font-family:inherit;" placeholder="Alias, CBU y nombre del titular"></textarea>
+          </div>
         </div>
         <button class="btn btn-primary" id="btn-advance" style="margin-top:14px;">Guardar y continuar</button>
       `;
@@ -512,12 +547,16 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         try {
           const invoiceUrl = await uploadField('field-invoice');
           const cbu = document.getElementById('field-cbu').value.trim();
-          if (!invoiceUrl || !cbu) { alert('Faltan la Factura X y/o el CBU'); return; }
+          if (!invoiceUrl || !cbu) { alert('Faltan la Factura X y/o los datos para transferir'); return; }
           const amount = document.getElementById('field-amount-invoice').value;
-          const body = { invoice_attachment_url: invoiceUrl, cbu };
-          if (amount) body.amount_invoice = amount;
-          order = await Api.post(`/api/orders/${order.id}/advance`, body);
-          draw();
+          proceedWithAmountCheck(amount, async () => {
+            try {
+              const body = { invoice_attachment_url: invoiceUrl, cbu };
+              if (amount) body.amount_invoice = amount;
+              order = await Api.post(`/api/orders/${order.id}/advance`, body);
+              draw();
+            } catch (err) { alert(err.message); }
+          });
         } catch (err) { alert(err.message); }
       });
       return;
@@ -544,15 +583,15 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         <h3>Comprobante de pago</h3>
         ${order.payment_attachment_url
           ? `<p>Comprobante cargado: <a href="${order.payment_attachment_url}" target="_blank">Ver</a></p>`
-          : `<div class="field-grid">
+          : `<p style="font-size:13px;color:var(--text-muted);">Subí el comprobante que te mandó el cliente y el monto pagado.</p>
+            <div class="field-grid">
               <div class="field"><label>Comprobante de pago (foto o PDF)</label><input type="file" id="field-payment" accept="image/*,application/pdf"></div>
               <div class="field"><label>Monto del comprobante</label><input type="number" step="0.01" id="field-amount-payment"></div>
             </div>
             <button class="btn btn-secondary" id="btn-attach-payment" style="margin-top:10px;">Adjuntar comprobante</button>`
         }
-        <div style="margin-top:14px;">
-          <button class="btn btn-primary" id="btn-confirm-payment" ${!order.payment_attachment_url ? 'disabled' : ''}>Confirmar pago</button>
-        </div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:14px;">Cuando esté todo bien, confirmá el pago para pasar a preparación.</p>
+        <button class="btn btn-primary" id="btn-confirm-payment" ${!order.payment_attachment_url ? 'disabled' : ''}>Confirmar pago</button>
       `;
       const attachBtn = document.getElementById('btn-attach-payment');
       if (attachBtn) {
@@ -561,10 +600,14 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
             const url = await uploadField('field-payment');
             if (!url) { alert('Falta el comprobante'); return; }
             const amount = document.getElementById('field-amount-payment').value;
-            const body = { attachment_url: url };
-            if (amount) body.amount_payment = amount;
-            order = await Api.post(`/api/orders/${order.id}/attach-payment`, body);
-            draw();
+            proceedWithAmountCheck(amount, async () => {
+              try {
+                const body = { attachment_url: url };
+                if (amount) body.amount_payment = amount;
+                order = await Api.post(`/api/orders/${order.id}/attach-payment`, body);
+                draw();
+              } catch (err) { alert(err.message); }
+            });
           } catch (err) { alert(err.message); }
         });
       }
@@ -577,6 +620,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
     if (order.status_index === 4) {
       el.innerHTML = `
         <h3>En preparación</h3>
+        <p style="font-size:13px;color:var(--text-muted);">Cuando termines de armar el pedido físico, marcá que terminaste para pasar a Despachar.</p>
         <button class="btn btn-primary" id="btn-advance">Terminé de preparar</button>
       `;
       document.getElementById('btn-advance').addEventListener('click', async () => {
@@ -615,6 +659,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
     if (order.status_index === 6) {
       el.innerHTML = `
         <h3>Despachado</h3>
+        <p style="font-size:13px;color:var(--text-muted);">Cuando el pedido ya salió, marcalo como finalizado para calcular la comisión de la venta.</p>
         <button class="btn btn-primary" id="btn-advance">Marcar como finalizado</button>
       `;
       document.getElementById('btn-advance').addEventListener('click', () => {
@@ -634,6 +679,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       el.innerHTML = `
         <h3>Finalizado</h3>
         ${order.commission ? `<p>Comisión de esta venta: <strong>${formatMoney(order.commission.amount)}</strong></p>` : ''}
+        <p style="font-size:13px;color:var(--text-muted);">Continuá con el seguimiento posventa para acordarte de consultarle al cliente más adelante.</p>
         <button class="btn btn-primary" id="btn-advance">Continuar seguimiento posventa</button>
       `;
       document.getElementById('btn-advance').addEventListener('click', async () => {

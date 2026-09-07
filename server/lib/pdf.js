@@ -39,31 +39,7 @@ function shippingLine(shipping_type, shipping_carrier, shipping_address) {
   return line;
 }
 
-// Recuadro "FACTURA X" como el que usa Damián en sus facturas de papel: no
-// es una factura fiscal, es la leyenda habitual para remitos/comprobantes
-// internos de venta mayorista. Va en el Presupuesto (el documento con
-// precios que se le manda a Damián para que facture). Se dibuja arriba a
-// la derecha del título.
-function drawFacturaXBadge(doc) {
-  const boxSize = 26;
-  const boxX = 470;
-  const boxY = 38;
-  doc.save();
-  doc.lineWidth(1.5).strokeColor('#000000').rect(boxX, boxY, boxSize, boxSize).stroke();
-  doc.font('Bold').fontSize(18).fillColor('#000000').text('X', boxX, boxY + 4, { width: boxSize, align: 'center' });
-  doc.font('Bold').fontSize(9).text('FACTURA X', boxX - 25, boxY + boxSize + 4, { width: boxSize + 50, align: 'center' });
-  doc.restore();
-  doc.font('Body');
-}
-
 function drawHeader(doc, title, subtitle, seller) {
-  // doc.text(str, x, y, ...) con x/y explícitos deja el cursor de flujo
-  // (doc.x/doc.y) posicionado ahí, así que hay que devolverlo al margen
-  // izquierdo o el resto del documento queda arrastrado a esa columna.
-  const topY = doc.y;
-  if (title === 'Presupuesto') drawFacturaXBadge(doc);
-  doc.x = doc.page.margins.left;
-  doc.y = topY;
   doc.font('Bold').fillColor(PINK_DARK).fontSize(20).text('VOLPAIA', { continued: false });
   doc.fontSize(14).fillColor('#000000').text(title);
   doc.font('Body');

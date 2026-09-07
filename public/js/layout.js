@@ -30,11 +30,6 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
         <nav id="sidebar-nav"></nav>
       </aside>
       <div class="main-column">
-        <div class="push-banner" id="push-banner" hidden>
-          <span>Activá las notificaciones para recibir avisos de pedidos y mensajes en este celular/PC.</span>
-          <button class="btn btn-secondary" id="push-banner-btn" style="padding:6px 14px;font-size:13px;">Activar notificaciones</button>
-          <button class="push-banner-dismiss" id="push-banner-dismiss" title="Cerrar">×</button>
-        </div>
         <header class="topbar">
           <button class="hamburger-btn" id="hamburger-btn" aria-label="Abrir menú">
             <span></span><span></span><span></span>
@@ -92,59 +87,12 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
   refreshChatBadge();
   notifPollInterval = setInterval(() => { refreshNotifBadge(); refreshChatBadge(); }, 45000);
 
-  setupPushBanner();
+  // El banner de "Activar notificaciones" se sacó a propósito: el sistema de
+  // notificaciones push se va a rediseñar de nuevo (a qué pasos avisan, a
+  // quién, push vs. botón manual), así que por ahora no se pide el permiso
+  // ni se muestra ningún aviso al respecto.
 
   return document.getElementById('page-content');
-}
-
-function setupPushBanner() {
-  const banner = document.getElementById('push-banner');
-  if (!banner || typeof pushSupported !== 'function') return;
-
-  // "volpaia_push_active" es la fuente de verdad principal: se guarda en
-  // cuanto la suscripción se hizo con éxito una vez, así el banner no
-  // vuelve a aparecer aunque la lectura de Notification.permission tenga
-  // alguna demora/inconsistencia puntual del navegador en la próxima carga.
-  const alreadyActive = localStorage.getItem('volpaia_push_active') === '1';
-  const dismissed = localStorage.getItem('volpaia_push_dismissed') === '1';
-
-  if (alreadyActive || dismissed) {
-    banner.hidden = true;
-    if (typeof setupPushNotifications === 'function') setupPushNotifications();
-    return;
-  }
-
-  if (!pushSupported() || Notification.permission === 'denied') {
-    banner.hidden = true;
-    if (typeof setupPushNotifications === 'function') setupPushNotifications();
-    return;
-  }
-
-  if (Notification.permission === 'granted') {
-    banner.hidden = true;
-    localStorage.setItem('volpaia_push_active', '1');
-    if (typeof setupPushNotifications === 'function') setupPushNotifications();
-    return;
-  }
-
-  banner.hidden = false;
-  document.getElementById('push-banner-btn').addEventListener('click', async () => {
-    const result = await requestAndSubscribePush();
-    if (result.ok) {
-      localStorage.setItem('volpaia_push_active', '1');
-      banner.hidden = true;
-    } else if (result.reason === 'denied') {
-      alert('Bloqueaste las notificaciones para Volpaia. Para activarlas después, tenés que habilitarlas desde la configuración de notificaciones del navegador/sistema para esta app.');
-      localStorage.setItem('volpaia_push_dismissed', '1');
-      banner.hidden = true;
-    } else {
-      alert('No se pudo activar la notificación push. Probá de nuevo en unos segundos; si persiste, puede que este navegador/dispositivo no lo soporte todavía.');
-    }
-  });
-  document.getElementById('push-banner-dismiss').addEventListener('click', () => {
-    localStorage.setItem('volpaia_push_dismissed', '1');
-    banner.hidden = true;
-  });
 }
 
 // Insignia de mensajes sin leer en el ítem "Chat" del menú — es un contador
