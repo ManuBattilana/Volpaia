@@ -88,6 +88,15 @@ async function renderConfiguracion(container, currentUser) {
         ${users.map(u => u.id === currentUser.id ? userForm(u) : userReadOnly(u)).join('')}
       </div>
     </div>
+
+    ${currentUser.role === 'owner' ? `
+      <div class="detail-section" style="border:1.5px solid var(--danger);">
+        <h3 style="color:var(--danger);">Zona de peligro</h3>
+        <p style="font-size:13px;color:var(--text-muted);">Borra TODOS los clientes, productos, contactos, pedidos y presupuestos cargados — pensado para vaciar los datos de prueba antes de empezar a usar el sistema en serio. No toca usuarios ni esta configuración. <strong>No se puede deshacer.</strong></p>
+        <button class="btn btn-danger" id="btn-reset-data" style="margin-top:8px;">Borrar todos los datos de prueba</button>
+        <div id="reset-data-msg" style="margin-top:10px;font-size:13px;"></div>
+      </div>
+    ` : ''}
   `;
 
   drawPushStatus();
@@ -177,6 +186,24 @@ async function renderConfiguracion(container, currentUser) {
         msgEl.style.color = 'var(--danger)';
         msgEl.textContent = err.message;
       }
+    });
+  }
+
+  const resetBtn = document.getElementById('btn-reset-data');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      const typed = prompt('Esto borra TODOS los clientes, productos, contactos, pedidos y presupuestos, y no se puede deshacer.\n\nEscribí BORRAR para confirmar:');
+      if (typed !== 'BORRAR') return;
+      const msg = document.getElementById('reset-data-msg');
+      msg.style.color = 'var(--text-muted)';
+      msg.textContent = 'Borrando...';
+      Api.post('/api/admin/reset-test-data').then(() => {
+        msg.style.color = '#2e7d32';
+        msg.textContent = 'Listo — todos los datos de prueba fueron borrados.';
+      }).catch(err => {
+        msg.style.color = 'var(--danger)';
+        msg.textContent = err.message;
+      });
     });
   }
 }

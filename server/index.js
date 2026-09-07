@@ -430,6 +430,30 @@ async function start() {
   app.use('/api/push', requireAuth, pushRouterFactory(db));
   app.use('/api/search', requireAuth, searchRouterFactory(db));
 
+  // Borrar todos los datos de prueba/carga (clientes, productos, contactos,
+  // pedidos, presupuestos, comisiones, notificaciones, mensajes e historial
+  // de importaciones) para arrancar de cero antes de empezar a usar el
+  // sistema en serio — sin tocar usuarios ni la configuración general.
+  // Solo lo puede ejecutar la dueña (role === 'owner').
+  app.post('/api/admin/reset-test-data', requireAuth, (req, res) => {
+    if (req.currentUser.role !== 'owner') {
+      return res.status(403).json({ error: 'Solo la dueña puede borrar los datos de prueba' });
+    }
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM orders').run();
+      db.prepare('DELETE FROM quotes').run();
+      db.prepare('DELETE FROM contacts').run();
+      db.prepare('DELETE FROM clients').run();
+      db.prepare('DELETE FROM products').run();
+      db.prepare('DELETE FROM notifications').run();
+      db.prepare('DELETE FROM messages').run();
+      db.prepare('DELETE FROM product_import_log').run();
+      db.prepare("UPDATE counters SET value = 0 WHERE name IN ('client_number', 'order_number', 'quote_number')").run();
+    });
+    tx();
+    res.json({ ok: true });
+  });
+
   // ---------- Static frontend ----------
   // ASSET_VERSION cambia en cada arranque del servidor (cada deploy reinicia
   // el proceso), y se inyecta como ?v=... en cada <script>/<link> de
