@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { generatePreparationPdf } = require('../lib/pdf');
+const { generatePreparationPdf, generateQuotePdf } = require('../lib/pdf');
 const { validateItems } = require('../lib/orderItems');
 const { sendPush } = require('../lib/push');
 
@@ -123,11 +123,35 @@ function createOrderHelpers(db, uploadDir) {
     });
   }
 
+  // Si cambia el envío de un pedido ya en curso, hay que regenerar tanto el
+  // PDF de preparación (usa order.shipping_type/carrier como override) como
+  // el PDF del presupuesto/pedido (que arrastra su propia copia de esos
+  // campos desde el momento en que se creó, y hay que actualizarla para que
+  // no quede desactualizada respecto al pedido real).
+  function regenerateOrderPdfs(orderId) {
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+    const tasks = [generatePrepPdf(orderId)];
+    if (order.quote_id) {
+      const quote = db.prepare('SELECT * FROM quotes WHERE id = ?').get(order.quote_id);
+      if (quote) {
+        db.prepare('UPDATE quotes SET shipping_type = ?, shipping_carrier = ?, shipping_address = ? WHERE id = ?')
+          .run(order.shipping_type, order.shipping_carrier, order.shipping_address, quote.id);
+        const updatedQuote = db.prepare('SELECT * FROM quotes WHERE id = ?').get(quote.id);
+        const items = getItems(orderId);
+        const seller = getSellerName(order.created_by);
+        const filename = `presupuesto-${quote.quote_number}.pdf`;
+        const filePath = path.join(uploadDir, filename);
+        tasks.push(generateQuotePdf(filePath, { quote: updatedQuote, items, seller }).then(() => assertValidPdf(filePath)));
+      }
+    }
+    return Promise.all(tasks);
+  }
+
   return {
     STATUSES, FINALIZADO_INDEX, LAST_INDEX,
     getSettings, nextOrderNumber, calcOrderAmount, otherUserId, notify,
     getItems, getClient, getSellerName, serializeOrder, generatePrepPdf,
-    assertValidPdf,
+    regenerateOrderPdfs, assertValidPdf,
   };
 }
 
@@ -136,7 +160,7 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
   const helpers = sharedHelpers || createOrderHelpers(db, uploadDir);
   const {
     getClient, serializeOrder, generatePrepPdf, calcOrderAmount,
-    otherUserId, notify, getSettings,
+    otherUserId, notify, getSettings, regenerateOrderPdfs,
   } = helpers;
 
   router.get('/statuses', (req, res) => res.json(STATUSES));
@@ -222,6 +246,47 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
         await generatePrepPdf(order.id);
       } catch (err) {
         console.error('Error regenerando PDF de preparación', err);
+      }
+    }
+
+    const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
+    res.json(serializeOrder(updated));
+  });
+
+  // El método de envío se puede corregir mientras el pedido está "En
+  // preparación" o "Listo para despachar" — por si el cliente lo cambia de
+  // último momento, antes de que salga físicamente. Una vez despachado ya
+  // no tiene sentido (el paquete ya salió con esos datos).
+  router.post('/:id/update-shipping', async (req, res) => {
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (order.cancelled) return res.status(400).json({ error: 'El pedido está cancelado' });
+    if (order.status_index < 4 || order.status_index > 5) {
+      return res.status(400).json({ error: 'El método de envío solo se puede modificar mientras el pedido está en preparación o listo para despachar' });
+    }
+    const { shipping_type, shipping_carrier, shipping_address } = req.body || {};
+    if (!shipping_type) return res.status(400).json({ error: 'Falta el tipo de envío' });
+
+    const changed = shipping_type !== order.shipping_type
+      || (shipping_carrier || null) !== (order.shipping_carrier || null)
+      || (shipping_address || null) !== (order.shipping_address || null);
+
+    if (changed) {
+      db.prepare(`
+        UPDATE orders SET shipping_type = ?, shipping_carrier = ?, shipping_address = ?, modified = 1, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(shipping_type, shipping_carrier || null, shipping_address || null, order.id);
+
+      let note = `Método de envío actualizado: ${order.shipping_type || '(sin definir)'}${order.shipping_carrier ? ' (' + order.shipping_carrier + ')' : ''} → ${shipping_type}${shipping_carrier ? ' (' + shipping_carrier + ')' : ''}`;
+      db.prepare(`
+        INSERT INTO order_status_history (order_id, from_status, to_status, changed_by, note)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(order.id, order.status_index, order.status_index, req.currentUser.id, note);
+
+      try {
+        await regenerateOrderPdfs(order.id);
+      } catch (err) {
+        console.error('Error regenerando PDFs tras cambiar el envío:', err);
       }
     }
 

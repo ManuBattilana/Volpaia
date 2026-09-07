@@ -123,12 +123,12 @@ function drawClientBlock(doc, person, shippingOverride) {
 function drawFooter(doc) {
   const bottom = doc.page.height - 90;
   doc.moveTo(PAGE_MARGIN, bottom).lineTo(CONTENT_RIGHT, bottom).strokeColor(PINK_DARK).lineWidth(1).stroke();
-  doc.font('Bold').fontSize(12).fillColor(PINK_DARK).text('VOLPAIA', PAGE_MARGIN, bottom + 14, { continued: true, lineBreak: false });
-  doc.font('Body').fontSize(11).fillColor(TEXT_MUTED).text('   mixed underwear   ·   ¡Gracias por tu pedido!', { lineBreak: false });
+  doc.font('Bold').fontSize(12).fillColor(PINK_DARK).text('VOLPAIA', PAGE_MARGIN, bottom + 14, { lineBreak: false });
 }
 
 function drawItemsTable(doc, items) {
   const colX = { desc: PAGE_MARGIN, pres: 275, qty: 355, price: 415, subtotal: 485 };
+  const descWidth = colX.pres - colX.desc - 16;
   const tableTop = doc.y;
 
   doc.roundedRect(PAGE_MARGIN, tableTop, CONTENT_RIGHT - PAGE_MARGIN, 26, 6).fillColor(PINK_DARK).fill();
@@ -147,14 +147,19 @@ function drawItemsTable(doc, items) {
   items.forEach((it, idx) => {
     const subtotal = it.quantity * it.unit_price;
     total += subtotal;
-    const rowHeight = 26;
+    const desc = `${it.product_code || ''} - ${it.product_description || ''}`;
+    // La descripción puede envolver a más de una línea — si la fila tuviera
+    // una altura fija, la fila de abajo le pisaba el texto encima. Se mide
+    // cuánto ocupa de verdad y la fila crece para que entre completa.
+    const descHeight = doc.heightOfString(desc, { width: descWidth });
+    const rowHeight = Math.max(26, descHeight + 14);
     const y = doc.y;
     if (idx % 2 === 1) {
       doc.rect(PAGE_MARGIN, y, CONTENT_RIGHT - PAGE_MARGIN, rowHeight).fillColor(PINK_LIGHT).fill();
     }
     const textY = y + 7;
     doc.fillColor('#000000');
-    doc.text(`${it.product_code || ''} - ${it.product_description || ''}`, colX.desc + 10, textY, { width: colX.pres - colX.desc - 16 });
+    doc.text(desc, colX.desc + 10, textY, { width: descWidth });
     doc.text(it.presentation, colX.pres, textY, { width: 75 });
     doc.text(String(it.quantity), colX.qty, textY, { width: 55 });
     doc.text(money(it.unit_price), colX.price, textY, { width: 65 });
@@ -218,9 +223,18 @@ function generatePreparationPdf(filePath, { order, items, client, seller }) {
     doc.font('Bold').fontSize(13).fillColor(PINK_DARK).text(`Ítems a preparar (${items.length})`);
     doc.moveDown(0.6);
 
+    const descX = PAGE_MARGIN + 44;
+    const descWidth = 260;
+    const presX = descX + descWidth + 10;
+    const presWidth = 92;
+    const qtyX = presX + presWidth + 10;
+
     items.forEach((it, idx) => {
       const boxSize = 22;
-      const rowHeight = 40;
+      const desc = `${it.product_code || ''} - ${it.product_description || ''}`;
+      doc.font('Bold').fontSize(13.5);
+      const descHeight = doc.heightOfString(desc, { width: descWidth });
+      const rowHeight = Math.max(40, descHeight + 18);
       const y = doc.y;
       if (idx % 2 === 1) {
         doc.rect(PAGE_MARGIN, y, CONTENT_RIGHT - PAGE_MARGIN, rowHeight).fillColor(PINK_LIGHT).fill();
@@ -228,16 +242,19 @@ function generatePreparationPdf(filePath, { order, items, client, seller }) {
       doc.roundedRect(PAGE_MARGIN + 8, y + (rowHeight - boxSize) / 2, boxSize, boxSize, 4)
         .lineWidth(1.6).strokeColor(CYAN).stroke();
 
-      doc.font('Bold').fillColor('#000000').fontSize(13.5).text(
-        `${it.product_code || ''} - ${it.product_description || ''}`,
-        PAGE_MARGIN + 44, y + 7, { width: 330 }
-      );
-      doc.font('Body').fillColor(TEXT_MUTED).fontSize(11).text(
-        it.presentation,
-        PAGE_MARGIN + 44, y + 23
-      );
-      doc.font('Bold').fillColor(PINK_DARK).fontSize(16).text(
-        `x${it.quantity}`, 0, y + (rowHeight - 16) / 2, { width: CONTENT_RIGHT - 6, align: 'right' }
+      // Artículo y descripción a la izquierda; unidad de medida bien
+      // resaltada (una etiqueta de color) justo al lado de la cantidad, que
+      // es lo más grande de toda la fila — así de un vistazo se ve qué hay
+      // que buscar, en qué presentación y cuántos.
+      doc.font('Bold').fillColor('#000000').fontSize(13.5).text(desc, descX, y + 9, { width: descWidth });
+
+      const badgeY = y + (rowHeight - 20) / 2;
+      const badgeWidth = doc.font('Bold').fontSize(10.5).widthOfString(it.presentation) + 16;
+      doc.roundedRect(presX, badgeY, badgeWidth, 20, 10).fillColor(CYAN).fill();
+      doc.font('Bold').fillColor('#ffffff').fontSize(10.5).text(it.presentation, presX, badgeY + 5, { width: badgeWidth, align: 'center' });
+
+      doc.font('Bold').fillColor(PINK_DARK).fontSize(18).text(
+        `x${it.quantity}`, qtyX, y + (rowHeight - 18) / 2, { width: CONTENT_RIGHT - qtyX - 6, align: 'right' }
       );
       doc.y = y + rowHeight;
     });

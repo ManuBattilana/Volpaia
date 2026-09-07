@@ -340,6 +340,7 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   // pedido, pero se puede corregir puntualmente para ese pedido en particular.
   ensureColumn('orders', 'shipping_type', 'TEXT');
   ensureColumn('orders', 'shipping_carrier', 'TEXT');
+  ensureColumn('orders', 'shipping_address', 'TEXT');
   // Claves VAPID para notificaciones push: se generan una sola vez (ver
   // server/lib/push.js) y quedan guardadas para no invalidar las
   // suscripciones ya hechas por los navegadores en cada reinicio.
@@ -414,6 +415,11 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   // Logo de la empresa: se sube desde Configuración y se usa tanto en la
   // barra lateral como en el encabezado de los PDFs.
   ensureColumn('settings', 'logo_url', 'TEXT');
+
+  // Cuando se corrige el método de envío de un pedido ya en curso (no es un
+  // cambio de estado, así que no hay from_status/to_status reales) se deja
+  // esta nota en el mismo historial en vez de crear una tabla aparte.
+  ensureColumn('order_status_history', 'note', 'TEXT');
 
   // Seed default user (Melany, owner role) if none exists
   const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;

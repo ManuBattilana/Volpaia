@@ -12,6 +12,68 @@ const ORDER_STATUSES = [
 const FINALIZADO_INDEX = 7;
 const LAST_INDEX = ORDER_STATUSES.length - 1;
 
+// Un color propio por estado para que la etiqueta se distinga de un
+// vistazo en la lista — antes todos los estados en curso se veían igual
+// (rosa clarito), y solo Cancelado tenía color distinto.
+const ORDER_STATUS_COLORS = [
+  { bg: '#f0d3de', color: 'var(--pink-dark)' }, // Pedido confirmado
+  { bg: '#fff3e0', color: '#ef6c00' }, // Enviar a facturación
+  { bg: '#e3f2fd', color: '#1565c0' }, // Facturado
+  { bg: '#f3e5f5', color: '#7b1fa2' }, // Esperando comprobante
+  { bg: '#fff8e1', color: '#f9a825' }, // En preparación
+  { bg: '#e0f7fa', color: '#00838f' }, // Listo para despachar
+  { bg: '#e8eaf6', color: '#3949ab' }, // Despachado
+  { bg: '#e6f7e8', color: '#2e7d32' }, // Finalizado
+  { bg: '#fce4ec', color: '#ad1457' }, // Seguimiento posventa
+];
+function orderStatusStyle(o) {
+  if (o.cancelled) return { bg: '#fde2e2', color: 'var(--danger)' };
+  return ORDER_STATUS_COLORS[o.status_index] || ORDER_STATUS_COLORS[0];
+}
+
+// Tarjeta de método de envío: aparece desde "En preparación" en adelante —
+// Darío la necesita para saber qué rótulo armar. Se puede editar mientras
+// el pedido está en preparación o listo para despachar (por si el cliente
+// lo cambia de último momento); una vez despachado queda solo de lectura.
+function drawShippingCard(order) {
+  const canEdit = order.status_index === 4 || order.status_index === 5;
+  return `
+    <div class="detail-section" id="shipping-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">Método de envío</h3>
+        ${canEdit ? '<button class="btn btn-ghost" id="btn-edit-shipping">✎ Editar</button>' : ''}
+      </div>
+      <div id="shipping-view" style="margin-top:8px;">
+        <div style="font-size:14.5px;"><strong>${escapeHtml(order.shipping_type || '(sin definir)')}</strong>${order.shipping_carrier ? ' · ' + escapeHtml(order.shipping_carrier) : ''}</div>
+        ${order.shipping_address ? `<div style="font-size:13px;color:var(--text-muted);margin-top:4px;">${escapeHtml(order.shipping_address)}</div>` : ''}
+      </div>
+      <div id="shipping-edit-form" hidden style="margin-top:12px;">
+        <div class="field-grid">
+          <div class="field">
+            <label>Tipo de envío</label>
+            <select id="shipping-edit-type">
+              ${SHIPPING_TYPES.map(t => `<option value="${escapeHtml(t)}" ${order.shipping_type === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Transporte (opcional)</label>
+            <input type="text" id="shipping-edit-carrier" value="${escapeHtml(order.shipping_carrier || '')}">
+          </div>
+          <div class="field full">
+            <label>Dirección de envío (opcional)</label>
+            <input type="text" id="shipping-edit-address" value="${escapeHtml(order.shipping_address || '')}">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn btn-primary" id="btn-save-shipping">Guardar</button>
+          <button class="btn btn-ghost" id="btn-cancel-edit-shipping">Cancelar</button>
+        </div>
+        <div id="shipping-edit-msg" style="margin-top:8px;font-size:12.5px;color:var(--danger);"></div>
+      </div>
+    </div>
+  `;
+}
+
 const PRESENTATIONS = [
   { key: 'Docena', enabledField: 'sale_dozen', priceField: 'price_dozen' },
   { key: 'Pack x3', enabledField: 'sale_pack3', priceField: 'price_pack3' },
@@ -115,13 +177,14 @@ function orderRow(o) {
   const name = [o.first_name, o.last_name].filter(Boolean).join(' ') || '(Sin nombre)';
   const clientLabel = o.business_name ? `${name} — ${o.business_name}` : name;
   const label = o.cancelled ? 'Cancelado' : o.status_label;
+  const style = orderStatusStyle(o);
   return `
     <div class="client-card order-row" data-id="${o.id}" style="cursor:pointer;">
       <div class="client-info">
         <div><span class="client-num">#${o.order_number}</span><span class="client-name">${escapeHtml(clientLabel)}</span>${o.modified && !o.cancelled ? ' <span class="stock-badge order">Modificado</span>' : ''}</div>
         <div class="client-location">${escapeHtml(label)} · ${formatMoney(o.calculated_amount)}</div>
       </div>
-      <span class="stock-badge" style="background:${o.cancelled ? '#fde2e2' : '#f0d3de'};color:${o.cancelled ? 'var(--danger)' : 'var(--pink-dark)'};">${escapeHtml(label)}</span>
+      <span class="stock-badge" style="background:${style.bg};color:${style.color};font-weight:700;">${escapeHtml(label)}</span>
     </div>
   `;
 }
@@ -171,7 +234,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       <button class="btn btn-secondary" id="btn-back" style="margin-bottom:16px;">← Volver</button>
       <div class="detail-header">
         <div class="detail-title">
-          <div class="eyebrow">PEDIDO #${order.order_number} · ${escapeHtml(order.status_label)}${order.modified ? ' · MODIFICADO' : ''}</div>
+          <div class="eyebrow">PEDIDO #${order.order_number} · <strong style="color:${orderStatusStyle(order).color};">${escapeHtml(order.status_label)}</strong>${order.modified ? ' · MODIFICADO' : ''}</div>
           <h1>${escapeHtml(clientName)}${order.client && order.client.business_name ? ' — ' + escapeHtml(order.client.business_name) : ''}</h1>
           ${order.client ? `<div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;">N° de cliente: #${escapeHtml(String(order.client.client_number))}</div>` : ''}
         </div>
@@ -220,6 +283,8 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         </div>
       ` : ''}
 
+      ${order.status_index >= 4 && !order.cancelled ? drawShippingCard(order) : ''}
+
       <div class="detail-section">
         <h3>Productos</h3>
         <table style="width:100%;border-collapse:collapse;" class="items-table-responsive">
@@ -265,8 +330,10 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
           ${order.history.map(h => `
             <div style="border-left:3px solid var(--pink-dark);padding-left:12px;">
               <div style="font-size:13.5px;">
-                ${h.is_correction ? '<strong style="color:#ef6c00;">Corrección:</strong> ' : ''}
-                ${h.from_status !== null ? escapeHtml(ORDER_STATUSES[h.from_status]) + ' → ' : ''}<strong>${escapeHtml(ORDER_STATUSES[h.to_status])}</strong>
+                ${h.note
+                  ? escapeHtml(h.note)
+                  : `${h.is_correction ? '<strong style="color:#ef6c00;">Corrección:</strong> ' : ''}${h.from_status !== null ? escapeHtml(ORDER_STATUSES[h.from_status]) + ' → ' : ''}<strong>${escapeHtml(ORDER_STATUSES[h.to_status])}</strong>`
+                }
               </div>
               <div style="font-size:12px;color:var(--text-muted);">
                 ${escapeHtml(h.changed_by_name || h.changed_by_username || '')} · ${escapeHtml(h.changed_at)}
@@ -286,6 +353,36 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
 
     const viewPrepPdfBtn = document.getElementById('btn-view-prep-pdf');
     if (viewPrepPdfBtn) viewPrepPdfBtn.addEventListener('click', () => openPdfPreview(order.preparation_pdf_path, `preparacion-${order.order_number}.pdf`));
+
+    const editShippingBtn = document.getElementById('btn-edit-shipping');
+    if (editShippingBtn) {
+      const shippingViewEl = document.getElementById('shipping-view');
+      const shippingFormEl = document.getElementById('shipping-edit-form');
+      editShippingBtn.addEventListener('click', () => {
+        shippingViewEl.hidden = true;
+        editShippingBtn.hidden = true;
+        shippingFormEl.hidden = false;
+      });
+      document.getElementById('btn-cancel-edit-shipping').addEventListener('click', () => {
+        shippingFormEl.hidden = true;
+        shippingViewEl.hidden = false;
+        editShippingBtn.hidden = false;
+      });
+      document.getElementById('btn-save-shipping').addEventListener('click', async () => {
+        const msg = document.getElementById('shipping-edit-msg');
+        msg.textContent = '';
+        try {
+          order = await Api.post(`/api/orders/${order.id}/update-shipping`, {
+            shipping_type: document.getElementById('shipping-edit-type').value,
+            shipping_carrier: document.getElementById('shipping-edit-carrier').value.trim(),
+            shipping_address: document.getElementById('shipping-edit-address').value.trim(),
+          });
+          draw();
+        } catch (err) {
+          msg.textContent = err.message;
+        }
+      });
+    }
 
     const editBtn = document.getElementById('btn-edit-items');
     if (editBtn) editBtn.addEventListener('click', startEditing);

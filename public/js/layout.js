@@ -16,6 +16,7 @@ const MENU_ITEMS = [
 
 const BellIcon = `<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>`;
 const ChatIcon = `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
+const SearchIcon = `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
 const LogoutIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const UploadIcon = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`;
 const FileIconSmall = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
@@ -90,9 +91,11 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
           </button>
           <div class="global-search-wrap" id="global-search-wrap">
             <input type="text" id="global-search-input" class="text-input" placeholder="Buscar cliente, contacto, pedido o presupuesto...">
+            <button class="mobile-search-close" id="mobile-search-close" aria-label="Cerrar búsqueda">${XIconSmall}</button>
             <div class="global-search-results" id="global-search-results" hidden></div>
           </div>
           <div class="topbar-right">
+            <button class="notif-bell mobile-search-btn" id="mobile-search-btn" title="Buscar">${SearchIcon}</button>
             <div class="notif-bell-wrap">
               <button class="notif-bell" id="notif-bell" title="Notificaciones">${BellIcon}<span class="notif-badge" id="notif-badge" hidden>0</span></button>
               <div class="notif-dropdown" id="notif-dropdown" hidden></div>
@@ -221,6 +224,25 @@ function setupGlobalSearch() {
   document.addEventListener('click', (e) => {
     if (!results.hidden && !e.target.closest('#global-search-wrap')) results.hidden = true;
   });
+
+  // En mobile la barra de búsqueda no entra en la topbar, así que queda
+  // oculta por CSS y se muestra como overlay al tocar la lupa.
+  const wrap = document.getElementById('global-search-wrap');
+  const mobileBtn = document.getElementById('mobile-search-btn');
+  const mobileClose = document.getElementById('mobile-search-close');
+  if (mobileBtn) {
+    mobileBtn.addEventListener('click', () => {
+      wrap.classList.add('mobile-open');
+      input.focus();
+    });
+  }
+  if (mobileClose) {
+    mobileClose.addEventListener('click', () => {
+      wrap.classList.remove('mobile-open');
+      results.hidden = true;
+      input.value = '';
+    });
+  }
 }
 
 // Insignia de mensajes sin leer en el ítem "Chat" del menú — es un contador

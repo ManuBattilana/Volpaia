@@ -69,7 +69,7 @@ a { color: var(--pink-dark); }
   margin-bottom: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 16px;
   background: var(--pink-light);
 }
 .login-card input:focus { outline: 2px solid var(--pink-dark); }
@@ -186,7 +186,7 @@ a { color: var(--pink-dark); }
   background: rgba(255,255,255,0.92);
   border: none;
   padding: 9px 14px;
-  font-size: 13.5px;
+  font-size: 16px;
 }
 .global-search-results {
   position: absolute;
@@ -214,8 +214,32 @@ a { color: var(--pink-dark); }
   color: #333;
 }
 .global-search-item:hover { background: var(--pink-light); }
+.mobile-search-btn { display: none; }
+.mobile-search-close { display: none; }
 @media (max-width: 720px) {
   .global-search-wrap { display: none; }
+  .mobile-search-btn { display: flex; }
+  .global-search-wrap.mobile-open {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 260;
+    background: var(--pink-dark);
+    padding: 12px 14px;
+    max-width: none;
+  }
+  .global-search-wrap.mobile-open .mobile-search-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--white);
+    margin-left: 8px;
+    flex-shrink: 0;
+  }
 }
 .hamburger-btn {
   display: none;
@@ -330,7 +354,7 @@ a { color: var(--pink-dark); }
   padding: 11px 14px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  font-size: 14px;
+  font-size: 16px;
   background: var(--white);
 }
 .search-bar input[type="text"]:focus { outline: 2px solid var(--pink-dark); }
@@ -340,7 +364,7 @@ a { color: var(--pink-dark); }
   padding: 11px 14px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  font-size: 14px;
+  font-size: 16px;
   background: var(--white);
   font-family: inherit;
 }
@@ -571,7 +595,7 @@ a { color: var(--pink-dark); }
   padding: 9px 12px;
   border-radius: 7px;
   border: 1px solid var(--border);
-  font-size: 14px;
+  font-size: 16px;
   background: var(--pink-light);
   font-family: inherit;
 }
@@ -805,6 +829,13 @@ a { color: var(--pink-dark); }
   html, body { overflow-x: hidden; }
   .layout { flex-direction: column; }
   .hamburger-btn { display: flex; }
+  .notif-dropdown {
+    position: fixed;
+    top: 58px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
   .sidebar-backdrop[hidden] { display: none; }
   .sidebar {
     position: fixed;
