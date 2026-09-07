@@ -173,6 +173,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         <div class="detail-title">
           <div class="eyebrow">PEDIDO #${order.order_number} · ${escapeHtml(order.status_label)}${order.modified ? ' · MODIFICADO' : ''}</div>
           <h1>${escapeHtml(clientName)}${order.client && order.client.business_name ? ' — ' + escapeHtml(order.client.business_name) : ''}</h1>
+          ${order.client && order.client.damian_client_number ? `<div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;">N° cliente Damián: ${escapeHtml(order.client.damian_client_number)}</div>` : ''}
         </div>
         <div class="detail-actions">
           ${phoneDigits ? `<a class="whatsapp-btn-large" href="https://wa.me/${phoneDigits}" target="_blank">${WhatsappIcon} WhatsApp cliente</a>` : ''}
@@ -540,9 +541,16 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       el.innerHTML = `
         <h3>Enviar a facturación</h3>
         <p style="font-size:13px;color:var(--text-muted);">Adjuntá la Factura X, los datos para transferir y el monto de la factura.</p>
+        <div class="alert-callout">
+          ⚠️ <strong>Importante:</strong> fijate el número de cliente que le puso Damián a este cliente en su sistema al facturar, y cargalo acá. Tiene que ser el mismo que usamos nosotros para no confundirnos.
+        </div>
         <div class="field-grid">
           ${fileFieldHtml('field-invoice', 'Factura X (foto o PDF)')}
           <div class="field"><label>Monto de la Factura X</label><input type="number" step="0.01" id="field-amount-invoice"></div>
+          <div class="field">
+            <label>N° de cliente en el sistema de Damián</label>
+            <input type="text" id="field-damian-client-number" class="text-input" value="${escapeHtml((order.client && order.client.damian_client_number) || '')}">
+          </div>
           <div class="field full">
             <label>Datos para transferir</label>
             <textarea id="field-cbu" rows="3" class="text-input" style="width:100%;font-family:inherit;" placeholder="Alias, CBU y nombre del titular"></textarea>
@@ -555,11 +563,13 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         try {
           const invoiceUrl = await uploadField('field-invoice');
           const cbu = document.getElementById('field-cbu').value.trim();
+          const damianClientNumber = document.getElementById('field-damian-client-number').value.trim();
           if (!invoiceUrl || !cbu) { alert('Faltan la Factura X y/o los datos para transferir'); return; }
+          if (!damianClientNumber) { alert('Falta el número de cliente que puso Damián al facturar'); return; }
           const amount = document.getElementById('field-amount-invoice').value;
           proceedWithAmountCheck(amount, async () => {
             try {
-              const body = { invoice_attachment_url: invoiceUrl, cbu };
+              const body = { invoice_attachment_url: invoiceUrl, cbu, damian_client_number: damianClientNumber };
               if (amount) body.amount_invoice = amount;
               order = await Api.post(`/api/orders/${order.id}/advance`, body);
               draw();

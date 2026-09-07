@@ -29,9 +29,23 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || '/';
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clientsArr) => {
       for (const client of clientsArr) {
-        if ('focus' in client) return client.focus();
+        if ('focus' in client) {
+          // Antes solo se enfocaba la pestaña ya abierta sin navegarla, así
+          // que si la notificación era de un mensaje de chat, la app se
+          // quedaba mostrando Inicio en vez de llevar al Chat. Si el
+          // navegador soporta client.navigate() se usa para ir directo a la
+          // URL pedida; si no, se manda un mensaje a la página para que
+          // navegue ella misma (ver window.addEventListener('message') en
+          // public/js/app.js).
+          if ('navigate' in client) {
+            try { await client.navigate(url); } catch (e) { /* algunos navegadores no dejan navegar cross-origin ni cambiar de tab en background */ }
+          } else {
+            client.postMessage({ type: 'navigate', url });
+          }
+          return client.focus();
+        }
       }
       if (self.clients.openWindow) return self.clients.openWindow(url);
     })

@@ -35,7 +35,7 @@ function renderChat(container, currentUser) {
             <div class="chat-bubble ${mine ? 'mine' : ''}">
               ${!mine ? `<div class="chat-sender">${escapeHtml(m.sender_name)}</div>` : ''}
               <div class="chat-text">${escapeHtml(m.body)}</div>
-              <div class="chat-time">${formatChatTime(m.created_at)}</div>
+              <div class="chat-time">${formatChatTime(m.created_at)}${mine ? (m.read ? ' · Visto' : ' · Enviado') : ''}</div>
             </div>
           </div>
         `;

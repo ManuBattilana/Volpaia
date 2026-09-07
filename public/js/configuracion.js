@@ -26,7 +26,16 @@ async function renderConfiguracion(container, currentUser) {
           <label>Teléfono de Damián (WhatsApp)</label>
           <input type="text" id="cfg-damian-phone" placeholder="Ej: 549351..." value="${escapeHtml(settings.damian_phone || '')}">
         </div>
+        <div class="field full">
+          <label>Mensaje de WhatsApp — "¿Llegó bien?"</label>
+          <textarea id="cfg-posventa-msg1" rows="2" class="text-input" style="width:100%;font-family:inherit;">${escapeHtml(settings.posventa_msg_1 || '')}</textarea>
+        </div>
+        <div class="field full">
+          <label>Mensaje de WhatsApp — "¿Querés reponer?"</label>
+          <textarea id="cfg-posventa-msg2" rows="2" class="text-input" style="width:100%;font-family:inherit;">${escapeHtml(settings.posventa_msg_2 || '')}</textarea>
+        </div>
       </div>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">En los mensajes de WhatsApp podés usar <code>{nombre}</code> y se reemplaza por el nombre del cliente.</p>
       <button class="btn btn-primary" id="btn-save-settings" style="margin-top:16px;">Guardar cambios</button>
       <div id="settings-msg" style="margin-top:10px;font-size:13px;"></div>
     </div>
@@ -55,6 +64,8 @@ async function renderConfiguracion(container, currentUser) {
         reminder_days_2: document.getElementById('cfg-days2').value,
         commission_percentage: document.getElementById('cfg-commission').value,
         damian_phone: document.getElementById('cfg-damian-phone').value,
+        posventa_msg_1: document.getElementById('cfg-posventa-msg1').value,
+        posventa_msg_2: document.getElementById('cfg-posventa-msg2').value,
       });
       msg.style.color = '#2e7d32';
       msg.textContent = 'Guardado correctamente.';

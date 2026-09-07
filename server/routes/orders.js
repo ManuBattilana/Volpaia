@@ -74,7 +74,7 @@ function createOrderHelpers(db, uploadDir) {
   function getClient(clientId) {
     return db.prepare(`
       SELECT id, first_name, last_name, business_name, client_number, phone, email,
-             fiscal_name, fiscal_id,
+             fiscal_name, fiscal_id, damian_client_number,
              address, locality, postal_code, province,
              shipping_type, shipping_carrier, shipping_address
       FROM clients WHERE id = ?
@@ -144,7 +144,7 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
   router.get('/', (req, res) => {
     const { status, q, client_id } = req.query;
     let sql = `
-      SELECT o.*, c.first_name, c.last_name, c.business_name, c.client_number
+      SELECT o.*, c.first_name, c.last_name, c.business_name, c.client_number, c.phone
       FROM orders o JOIN clients c ON c.id = o.client_id
       WHERE 1=1
     `;
@@ -241,7 +241,7 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
     if (otherId) {
       const message = `${req.currentUser.name || req.currentUser.username} canceló el pedido #${order.order_number}`;
       notify(otherId, 'status_change', order.id, message);
-      sendPush(db, [otherId], { title: 'Volpaia', body: message, url: '/' });
+      sendPush(db, [otherId], { title: 'Volpaia', body: message, url: '/?open=pedido&id=' + order.id });
     }
 
     const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
@@ -285,9 +285,14 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
       // Pedido confirmado -> Enviar a facturación
       notifyMessage = null;
     } else if (nextIndex === 2) {
-      // Enviar a facturación -> Facturado (Factura X + CBU + monto)
+      // Enviar a facturación -> Facturado (Factura X + CBU + monto). Acá
+      // también se confirma/actualiza el número de cliente que le puso
+      // Damián en su sistema al facturar, para que coincida con el nuestro.
       if (!body.invoice_attachment_url || !body.cbu) {
         return res.status(400).json({ error: 'Faltan la Factura X y/o el CBU' });
+      }
+      if (!body.damian_client_number || !String(body.damian_client_number).trim()) {
+        return res.status(400).json({ error: 'Falta el número de cliente que puso Damián al facturar' });
       }
       updates.invoice_attachment_url = body.invoice_attachment_url;
       updates.cbu = body.cbu;
@@ -333,6 +338,11 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
         VALUES (?, ?, ?, ?, ?)
       `).run(order.id, currentIndex, nextIndex, req.currentUser.id, attachmentUrl);
 
+      if (nextIndex === 2 && body.damian_client_number) {
+        db.prepare("UPDATE clients SET damian_client_number = ?, updated_at = datetime('now') WHERE id = ?")
+          .run(String(body.damian_client_number).trim(), order.client_id);
+      }
+
       if (nextIndex === FINALIZADO_INDEX) {
         const baseAmount = calcOrderAmount(order.id);
         const settings = getSettings();
@@ -359,7 +369,7 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
         const otherId = otherUserId(req.currentUser.id);
         if (otherId) {
           notify(otherId, 'status_change', order.id, notifyMessage);
-          sendPush(db, [otherId], { title: 'Volpaia', body: notifyMessage, url: '/' });
+          sendPush(db, [otherId], { title: 'Volpaia', body: notifyMessage, url: '/?open=pedido&id=' + order.id });
         }
       }
     });
@@ -393,7 +403,7 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
       if (otherId) {
         const message = `${req.currentUser.name || req.currentUser.username} corrigió el pedido #${order.order_number}: volvió a "${STATUSES[prevIndex]}"`;
         notify(otherId, 'status_change', order.id, message);
-        sendPush(db, [otherId], { title: 'Volpaia', body: message, url: '/' });
+        sendPush(db, [otherId], { title: 'Volpaia', body: message, url: '/?open=pedido&id=' + order.id });
       }
     });
     tx();
@@ -411,7 +421,18 @@ function ordersRouterFactory(db, uploadDir, sharedHelpers) {
     const { which } = req.body || {};
     if (which !== 1 && which !== 2) return res.status(400).json({ error: 'Falta indicar qué seguimiento (1 o 2)' });
     const column = which === 1 ? 'reminder_1_done' : 'reminder_2_done';
-    db.prepare(`UPDATE orders SET ${column} = 1 WHERE id = ?`).run(order.id);
+    const columnAt = which === 1 ? 'reminder_1_done_at' : 'reminder_2_done_at';
+    db.prepare(`UPDATE orders SET ${column} = 1, ${columnAt} = datetime('now') WHERE id = ?`).run(order.id);
+    const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
+    res.json(serializeOrder(updated));
+  });
+
+  // Queda registrado el momento en que el cliente dijo que quiere reponer,
+  // por si hace falta consultarlo después.
+  router.post('/:id/mark-reponer', (req, res) => {
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+    db.prepare("UPDATE orders SET reponer_clicked_at = datetime('now') WHERE id = ?").run(order.id);
     const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
     res.json(serializeOrder(updated));
   });

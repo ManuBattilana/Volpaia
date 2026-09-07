@@ -142,7 +142,7 @@ async function start() {
 
   const CLIENT_FIELDS = [
     'first_name', 'last_name', 'business_name', 'email', 'phone',
-    'fiscal_name', 'fiscal_id',
+    'fiscal_name', 'fiscal_id', 'damian_client_number',
     'address', 'locality', 'postal_code', 'province',
     'shipping_type', 'shipping_carrier', 'shipping_address',
     'website', 'facebook', 'instagram', 'tiktok',

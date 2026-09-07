@@ -16,10 +16,36 @@ async function boot() {
   }
 }
 
+// Cuando se toca una notificación push (chat o pedido) con la app ya
+// abierta en una pestaña, el service worker navega esa pestaña a una URL
+// como /?open=chat o /?open=pedido&id=5 — acá se traduce eso a la pantalla
+// correspondiente en vez de mostrar siempre Inicio.
+function routeFromLocation() {
+  const params = new URLSearchParams(location.search);
+  const open = params.get('open');
+  if (!open) return null;
+  history.replaceState(null, '', location.pathname);
+  if (open === 'chat') return { page: 'chat' };
+  if (open === 'pedido' && params.get('id')) return { page: 'pedido-detalle', id: Number(params.get('id')) };
+  return null;
+}
+
 function showApp() {
-  Nav.route = { page: 'inicio' };
+  Nav.route = routeFromLocation() || { page: 'inicio' };
   draw();
 }
+
+// Respaldo para navegadores donde el service worker no puede navegar
+// directamente la pestaña ya abierta (ver public/sw.js): manda un mensaje
+// en cambio, y acá se aplica igual que si se hubiera abierto esa URL.
+navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'navigate' && event.data.url) {
+    const url = new URL(event.data.url, location.origin);
+    history.replaceState(null, '', url.pathname + url.search);
+    const route = routeFromLocation();
+    if (route && Nav.user) { Nav.route = route; draw(); }
+  }
+});
 
 async function handleLogout() {
   await Api.post('/api/logout');

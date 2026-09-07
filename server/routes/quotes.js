@@ -254,7 +254,7 @@ module.exports = function quotesRouterFactory(db, uploadDir, orderHelpers) {
       const clientLabel = [quote.first_name, quote.last_name].filter(Boolean).join(' ') || quote.business_name || `presupuesto #${quote.quote_number}`;
       const message = `Hay un pedido nuevo #${orderNumber} (${clientLabel})`;
       notify(otherId, 'status_change', orderId, message);
-      sendPush(db, [otherId], { title: 'Volpaia', body: message, url: '/' });
+      sendPush(db, [otherId], { title: 'Volpaia', body: message, url: '/?open=pedido&id=' + orderId });
     }
 
     const updatedQuote = db.prepare('SELECT * FROM quotes WHERE id = ?').get(quote.id);

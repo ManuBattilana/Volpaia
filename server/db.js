@@ -357,6 +357,31 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   // índice de estado que ya no existe.
   db.prepare('UPDATE orders SET status_index = 0 WHERE status_index > 8').run();
 
+  // Registro de cuándo se hizo cada contacto de posventa (para poder
+  // mostrarlo en la pantalla de Posventa) y de cuándo se marcó que el
+  // cliente quiere reponer.
+  ensureColumn('orders', 'reminder_1_done_at', 'TEXT');
+  ensureColumn('orders', 'reminder_2_done_at', 'TEXT');
+  ensureColumn('orders', 'reponer_clicked_at', 'TEXT');
+  // Mensajes de WhatsApp precargados para los botones de Posventa,
+  // editables desde Configuración. {nombre} se reemplaza por el nombre del
+  // cliente al armar el link de WhatsApp.
+  ensureColumn('settings', 'posventa_msg_1', 'TEXT');
+  ensureColumn('settings', 'posventa_msg_2', 'TEXT');
+  db.prepare(`
+    UPDATE settings SET
+      posventa_msg_1 = COALESCE(posventa_msg_1, ?),
+      posventa_msg_2 = COALESCE(posventa_msg_2, ?)
+    WHERE id = 1
+  `).run(
+    '¡Hola {nombre}! Te escribimos de Volpaia para saber si te llegó bien tu pedido 😊',
+    '¡Hola {nombre}! ¿Te gustaría hacer un nuevo pedido? Contanos qué te gustaría llevar esta vez.'
+  );
+
+  // Damián numera a cada cliente en su propio sistema al facturar — este
+  // número tiene que coincidir con el nuestro para no confundirnos.
+  ensureColumn('clients', 'damian_client_number', 'TEXT');
+
   // Seed default user (Melany, owner role) if none exists
   const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
   if (userCount === 0) {

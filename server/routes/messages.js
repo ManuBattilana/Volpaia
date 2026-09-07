@@ -46,7 +46,7 @@ module.exports = function messagesRouterFactory(db) {
       sendPush(db, [other.id], {
         title: `Mensaje de ${req.currentUser.name}`,
         body: body.trim().slice(0, 140),
-        url: '/',
+        url: '/?open=chat',
       });
     }
 

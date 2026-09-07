@@ -19,7 +19,7 @@ function nextClientNumber() {
 }
 
 router.get('/', (req, res) => {
-  const { q } = req.query;
+  const { q, status } = req.query;
   let sql = 'SELECT * FROM contacts WHERE 1=1';
   const params = [];
   if (q) {
@@ -29,6 +29,10 @@ router.get('/', (req, res) => {
     )`;
     const like = `%${q}%`;
     for (let i = 0; i < 6; i++) params.push(like);
+  }
+  if (status) {
+    sql += ' AND status = ?';
+    params.push(status);
   }
   sql += ' ORDER BY created_at DESC';
   res.json(db.prepare(sql).all(...params));

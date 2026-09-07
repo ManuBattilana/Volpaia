@@ -14,6 +14,7 @@ const MENU_ITEMS = [
 ];
 
 const BellIcon = `<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>`;
+const ChatIcon = `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
 const LogoutIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const UploadIcon = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`;
 const FileIconSmall = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
@@ -95,6 +96,7 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
               <button class="notif-bell" id="notif-bell" title="Notificaciones">${BellIcon}<span class="notif-badge" id="notif-badge" hidden>0</span></button>
               <div class="notif-dropdown" id="notif-dropdown" hidden></div>
             </div>
+            <button class="notif-bell" id="chat-bell" title="Chat">${ChatIcon}<span class="notif-badge" id="chat-badge" hidden>0</span></button>
             <span class="topbar-username">Hola, ${escapeHtml(user.name || user.username)}</span>
             <button class="logout-btn" id="logout-btn" title="Cerrar sesión">${LogoutIcon}</button>
           </div>
@@ -127,7 +129,7 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
   MENU_ITEMS.forEach(item => {
     const btn = document.createElement('button');
     btn.className = 'nav-item' + (item.key === activeKey ? ' active' : '') + (!item.enabled ? ' disabled' : '');
-    btn.innerHTML = escapeHtml(item.label) + (item.key === 'chat' ? '<span class="nav-badge" id="chat-nav-badge" hidden>0</span>' : '');
+    btn.innerHTML = escapeHtml(item.label);
     if (item.enabled) {
       btn.addEventListener('click', () => { closeDrawer(); onNavigate(item.key); });
     } else {
@@ -138,10 +140,12 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
 
   document.getElementById('logout-btn').addEventListener('click', onLogout);
 
+  document.getElementById('chat-bell').addEventListener('click', () => onNavigate('chat'));
+
   setupGlobalSearch();
   setupNotificationBell();
   refreshChatBadge();
-  notifPollInterval = setInterval(() => { refreshNotifBadge(); refreshChatBadge(); }, 45000);
+  notifPollInterval = setInterval(() => { refreshNotifBadge(); refreshChatBadge(); }, 15000);
 
   // El banner de "Activar notificaciones" se sacó a propósito: el sistema de
   // notificaciones push se va a rediseñar de nuevo (a qué pasos avisan, a
@@ -212,7 +216,7 @@ function setupGlobalSearch() {
 // Insignia de mensajes sin leer en el ítem "Chat" del menú — es un contador
 // aparte del de la campanita, ninguno de los dos alimenta al otro.
 async function refreshChatBadge() {
-  const badge = document.getElementById('chat-nav-badge');
+  const badge = document.getElementById('chat-badge');
   if (!badge) return;
   try {
     const { count } = await Api.get('/api/messages/unread-count');
