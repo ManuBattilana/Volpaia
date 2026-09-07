@@ -379,8 +379,24 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   );
 
   // Damián numera a cada cliente en su propio sistema al facturar — este
-  // número tiene que coincidir con el nuestro para no confundirnos.
+  // número tiene que coincidir con el nuestro para no confundirnos. (La
+  // columna quedó sin uso: ahora el número que carga Darío se aplica
+  // directo sobre clients.client_number, ver order_posventa_history.)
   ensureColumn('clients', 'damian_client_number', 'TEXT');
+
+  // Historial de acciones de posventa por pedido: cada click en "¿Llegó
+  // bien?", "¿Querés reponer?", "Quiere reponer" y cada actualización del
+  // número de cliente queda registrado acá con fecha y quién lo hizo.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS order_posventa_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      action TEXT NOT NULL,
+      detail TEXT,
+      changed_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
 
   // Seed default user (Melany, owner role) if none exists
   const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;

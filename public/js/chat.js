@@ -2,6 +2,7 @@
 // la campanita de notificaciones: acá solo viven los mensajes que se
 // escriben entre Melany y Darío.
 let chatPollInterval = null;
+let chatVisibilityHandler = null;
 
 function renderChat(container, currentUser) {
   container.innerHTML = `
@@ -42,7 +43,15 @@ function renderChat(container, currentUser) {
       }).join('');
     }
     if (scrollToEnd) list.scrollTop = list.scrollHeight;
-    Api.post('/api/messages/read-all').then(() => { if (typeof refreshChatBadge === 'function') refreshChatBadge(); }).catch(() => {});
+    // Solo se marca como "visto" cuando la persona realmente tiene la
+    // pantalla de Chat abierta y a la vista (pestaña activa y enfocada).
+    // Si el chat sigue montado en segundo plano (otra pestaña, minimizado)
+    // el polling de 5s NO debe marcar como leído lo que llegó mientras
+    // tanto — antes se marcaba "Visto" apenas llegaba el mensaje, sin que
+    // nadie lo hubiera abierto de verdad.
+    if (document.visibilityState === 'visible' && document.hasFocus()) {
+      Api.post('/api/messages/read-all').then(() => { if (typeof refreshChatBadge === 'function') refreshChatBadge(); }).catch(() => {});
+    }
   }
 
   document.getElementById('chat-form').addEventListener('submit', async (e) => {
@@ -62,6 +71,14 @@ function renderChat(container, currentUser) {
   loadMessages(true);
   if (chatPollInterval) clearInterval(chatPollInterval);
   chatPollInterval = setInterval(() => loadMessages(false), 5000);
+
+  // Si la pestaña estaba en segundo plano y la persona vuelve a mirarla
+  // con el chat todavía abierto, marcamos como visto ahí mismo en vez de
+  // esperar hasta 5 segundos al próximo polling.
+  if (chatVisibilityHandler) document.removeEventListener('visibilitychange', chatVisibilityHandler);
+  chatVisibilityHandler = () => { if (document.visibilityState === 'visible') loadMessages(false); };
+  document.addEventListener('visibilitychange', chatVisibilityHandler);
+  window.addEventListener('focus', chatVisibilityHandler);
 }
 
 function formatChatTime(iso) {

@@ -145,7 +145,7 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
   setupGlobalSearch();
   setupNotificationBell();
   refreshChatBadge();
-  notifPollInterval = setInterval(() => { refreshNotifBadge(); refreshChatBadge(); }, 15000);
+  notifPollInterval = setInterval(() => { refreshNotifBadge(); refreshChatBadge(); }, 5000);
 
   // El banner de "Activar notificaciones" se sacó a propósito: el sistema de
   // notificaciones push se va a rediseñar de nuevo (a qué pasos avisan, a
@@ -281,11 +281,18 @@ async function drawNotifDropdown() {
         </div>
       `).join('')}
     </div>
+    <div style="padding:8px 14px;border-top:1px solid var(--border);text-align:center;">
+      <button id="notif-see-all" style="background:none;border:none;color:var(--cyan);font-size:12.5px;font-weight:600;">Ver todas agrupadas →</button>
+    </div>
   `;
   dropdown.querySelector('#notif-read-all').addEventListener('click', async () => {
     await Api.post('/api/notifications/read-all');
     await refreshNotifBadge();
     dropdown.hidden = true;
+  });
+  dropdown.querySelector('#notif-see-all').addEventListener('click', () => {
+    dropdown.hidden = true;
+    if (typeof currentOnNavigate === 'function') currentOnNavigate('notificaciones');
   });
   dropdown.querySelectorAll('.notif-item').forEach(el => {
     el.addEventListener('click', async () => {

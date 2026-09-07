@@ -105,7 +105,6 @@ const CLIENT_SECTIONS = [
     fields: [
       { key: 'fiscal_name', label: 'Razón social' },
       { key: 'fiscal_id', label: 'CUIL / DNI' },
-      { key: 'damian_client_number', label: 'N° de cliente en el sistema de Damián' },
     ]
   },
   {

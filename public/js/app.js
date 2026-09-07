@@ -174,6 +174,14 @@ function draw() {
   } else if (page === 'posventa') {
     renderPosventa(
       content,
+      (orderId) => navigateTo('posventa-detalle', { id: orderId }),
+      (client) => navigateTo('presupuesto-nuevo', { preset: { type: 'client', record: client } })
+    );
+  } else if (page === 'posventa-detalle') {
+    renderPosventaDetail(
+      content,
+      Nav.route.id,
+      () => navigateTo('posventa'),
       (orderId) => navigateTo('pedido-detalle', { id: orderId }),
       (client) => navigateTo('presupuesto-nuevo', { preset: { type: 'client', record: client } })
     );
@@ -181,6 +189,8 @@ function draw() {
     renderComisiones(content, (orderId) => navigateTo('pedido-detalle', { id: orderId }));
   } else if (page === 'chat') {
     renderChat(content, Nav.user);
+  } else if (page === 'notificaciones') {
+    renderNotificaciones(content, (orderId) => navigateTo('pedido-detalle', { id: orderId }));
   }
 }
 

@@ -173,7 +173,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         <div class="detail-title">
           <div class="eyebrow">PEDIDO #${order.order_number} · ${escapeHtml(order.status_label)}${order.modified ? ' · MODIFICADO' : ''}</div>
           <h1>${escapeHtml(clientName)}${order.client && order.client.business_name ? ' — ' + escapeHtml(order.client.business_name) : ''}</h1>
-          ${order.client && order.client.damian_client_number ? `<div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;">N° cliente Damián: ${escapeHtml(order.client.damian_client_number)}</div>` : ''}
+          ${order.client ? `<div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;">N° de cliente: #${escapeHtml(String(order.client.client_number))}</div>` : ''}
         </div>
         <div class="detail-actions">
           ${phoneDigits ? `<a class="whatsapp-btn-large" href="https://wa.me/${phoneDigits}" target="_blank">${WhatsappIcon} WhatsApp cliente</a>` : ''}
@@ -542,14 +542,15 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         <h3>Enviar a facturación</h3>
         <p style="font-size:13px;color:var(--text-muted);">Adjuntá la Factura X, los datos para transferir y el monto de la factura.</p>
         <div class="alert-callout">
-          ⚠️ <strong>Importante:</strong> fijate el número de cliente que le puso Damián a este cliente en su sistema al facturar, y cargalo acá. Tiene que ser el mismo que usamos nosotros para no confundirnos.
+          ⚠️ <strong>Importante:</strong> fijate el número de cliente que le puso Damián a este cliente en su sistema al facturar, y cargalo acá.
         </div>
         <div class="field-grid">
           ${fileFieldHtml('field-invoice', 'Factura X (foto o PDF)')}
           <div class="field"><label>Monto de la Factura X</label><input type="number" step="0.01" id="field-amount-invoice"></div>
           <div class="field">
             <label>N° de cliente en el sistema de Damián</label>
-            <input type="text" id="field-damian-client-number" class="text-input" value="${escapeHtml((order.client && order.client.damian_client_number) || '')}">
+            <input type="text" id="field-damian-client-number" class="text-input" placeholder="Ej: 555">
+            <span style="font-size:11.5px;color:var(--text-muted);">Ahora es #${order.client ? escapeHtml(String(order.client.client_number)) : '?'} en nuestro sistema — al guardar, pasa a ser este número.</span>
           </div>
           <div class="field full">
             <label>Datos para transferir</label>

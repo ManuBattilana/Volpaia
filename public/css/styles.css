@@ -93,7 +93,8 @@ a { color: var(--pink-dark); }
 /* ---------- Layout ---------- */
 .layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 .sidebar {
   width: 230px;
@@ -103,6 +104,8 @@ a { color: var(--pink-dark); }
   display: flex;
   flex-direction: column;
   padding: 20px 14px;
+  height: 100vh;
+  overflow-y: auto;
 }
 .sidebar .logo-wrap {
   background: var(--white);
@@ -163,6 +166,8 @@ a { color: var(--pink-dark); }
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .topbar {

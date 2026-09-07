@@ -142,7 +142,7 @@ async function start() {
 
   const CLIENT_FIELDS = [
     'first_name', 'last_name', 'business_name', 'email', 'phone',
-    'fiscal_name', 'fiscal_id', 'damian_client_number',
+    'fiscal_name', 'fiscal_id',
     'address', 'locality', 'postal_code', 'province',
     'shipping_type', 'shipping_carrier', 'shipping_address',
     'website', 'facebook', 'instagram', 'tiktok',
@@ -214,6 +214,34 @@ async function start() {
     res.json({ categories: rows, total });
   });
 
+  // Exportar el catálogo como CSV (se abre y edita en Excel) — declarado
+  // ANTES de "/api/products/:id" para que Express no confunda "export" con
+  // un id de producto y lo mande al handler equivocado.
+  const PRODUCTS_CSV_COLUMNS = [
+    'id', 'code', 'description', 'category', 'size', 'size_curve', 'colors',
+    'sale_dozen', 'sale_pack3', 'sale_unit',
+    'price_dozen', 'price_pack3', 'price_unit',
+    'stock_immediate', 'stock_order',
+  ];
+
+  function csvEscape(value) {
+    const str = value === null || value === undefined ? '' : String(value);
+    if (/[",\n]/.test(str)) return '"' + str.replace(/"/g, '""') + '"';
+    return str;
+  }
+
+  app.get('/api/products/export', (req, res) => {
+    const rows = db.prepare('SELECT * FROM products ORDER BY code ASC').all();
+    const lines = [PRODUCTS_CSV_COLUMNS.join(',')];
+    rows.forEach(p => {
+      lines.push(PRODUCTS_CSV_COLUMNS.map(col => csvEscape(p[col])).join(','));
+    });
+    const csv = '﻿' + lines.join('\r\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="productos.csv"');
+    res.send(csv);
+  });
+
   app.get('/api/products/:id', (req, res) => {
     const row = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Producto no encontrado' });
@@ -274,6 +302,47 @@ async function start() {
     if (!existing) return res.status(404).json({ error: 'Producto no encontrado' });
     db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
     res.json({ ok: true });
+  });
+
+  // Importar productos desde CSV (Excel): actualiza por id si viene en la
+  // fila, o crea uno nuevo si no. Pensado para el flujo exportar -> editar
+  // en Excel -> volver a importar.
+  const PRODUCT_NUMERIC_FIELDS = ['sale_dozen', 'sale_pack3', 'sale_unit', 'price_dozen', 'price_pack3', 'price_unit', 'stock_immediate', 'stock_order'];
+
+  app.post('/api/products/import', (req, res) => {
+    const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : null;
+    if (!rows) return res.status(400).json({ error: 'Faltan las filas a importar' });
+
+    let created = 0;
+    let updated = 0;
+    const tx = db.transaction(() => {
+      for (const raw of rows) {
+        const body = {};
+        PRODUCT_FIELDS.forEach(f => {
+          if (raw[f] === undefined || raw[f] === '') { body[f] = null; return; }
+          body[f] = PRODUCT_NUMERIC_FIELDS.includes(f) ? Number(raw[f]) : raw[f];
+        });
+        const id = raw.id ? Number(raw.id) : null;
+        const existing = id ? db.prepare('SELECT * FROM products WHERE id = ?').get(id) : null;
+        if (existing) {
+          const history = buildPriceHistoryAppend(existing.price_history, body, existing);
+          const sets = [...PRODUCT_FIELDS.map(f => `${f} = ?`), 'price_history = ?'];
+          const values = [...PRODUCT_FIELDS.map(f => body[f] ?? null), history];
+          db.prepare(`UPDATE products SET ${sets.join(', ')}, updated_at = datetime('now') WHERE id = ?`)
+            .run(...values, existing.id);
+          updated++;
+        } else {
+          const history = buildPriceHistoryAppend('', body, null);
+          const cols = [...PRODUCT_FIELDS, 'price_history'];
+          const values = [...PRODUCT_FIELDS.map(f => body[f] ?? null), history];
+          const placeholders = cols.map(() => '?').join(',');
+          db.prepare(`INSERT INTO products (${cols.join(',')}) VALUES (${placeholders})`).run(...values);
+          created++;
+        }
+      }
+    });
+    tx();
+    res.json({ ok: true, created, updated });
   });
 
   // ---------- Orders / Quotes / Notifications / Settings / Users / Contacts API ----------
