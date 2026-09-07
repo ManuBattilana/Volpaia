@@ -398,6 +398,23 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     );
   `);
 
+  // Registro de cada importación de productos desde Excel: qué archivo se
+  // subió, un resumen corto y el detalle campo por campo de qué cambió.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS product_import_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_by INTEGER REFERENCES users(id),
+      file_name TEXT,
+      summary TEXT NOT NULL,
+      details TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Logo de la empresa: se sube desde Configuración y se usa tanto en la
+  // barra lateral como en el encabezado de los PDFs.
+  ensureColumn('settings', 'logo_url', 'TEXT');
+
   // Seed default user (Melany, owner role) if none exists
   const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
   if (userCount === 0) {

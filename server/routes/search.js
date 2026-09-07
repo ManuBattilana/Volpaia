@@ -14,9 +14,9 @@ module.exports = function searchRouterFactory(db) {
     const clients = db.prepare(`
       SELECT id, client_number, first_name, last_name, business_name
       FROM clients
-      WHERE first_name LIKE ? OR last_name LIKE ? OR business_name LIKE ?
+      WHERE first_name LIKE ? OR last_name LIKE ? OR business_name LIKE ? OR CAST(client_number AS TEXT) LIKE ?
       ORDER BY client_number DESC LIMIT 5
-    `).all(like, like, like);
+    `).all(like, like, like, like);
 
     const contacts = db.prepare(`
       SELECT id, first_name, last_name, business_name

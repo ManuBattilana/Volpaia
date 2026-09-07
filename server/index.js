@@ -116,10 +116,11 @@ async function start() {
     if (q) {
       sql += ` AND (
         first_name LIKE ? OR last_name LIKE ? OR business_name LIKE ? OR
-        email LIKE ? OR phone LIKE ? OR locality LIKE ? OR province LIKE ?
+        email LIKE ? OR phone LIKE ? OR locality LIKE ? OR province LIKE ? OR
+        CAST(client_number AS TEXT) LIKE ?
       )`;
       const like = `%${q}%`;
-      for (let i = 0; i < 7; i++) params.push(like);
+      for (let i = 0; i < 8; i++) params.push(like);
     }
     sql += ' ORDER BY client_number ASC';
     const rows = db.prepare(sql).all(...params);
@@ -214,32 +215,56 @@ async function start() {
     res.json({ categories: rows, total });
   });
 
-  // Exportar el catálogo como CSV (se abre y edita en Excel) — declarado
-  // ANTES de "/api/products/:id" para que Express no confunda "export" con
-  // un id de producto y lo mande al handler equivocado.
-  const PRODUCTS_CSV_COLUMNS = [
-    'id', 'code', 'description', 'category', 'size', 'size_curve', 'colors',
-    'sale_dozen', 'sale_pack3', 'sale_unit',
-    'price_dozen', 'price_pack3', 'price_unit',
-    'stock_immediate', 'stock_order',
+  // Exportar/importar el catálogo como un .xlsx de verdad (no un csv
+  // disfrazado) — declarado ANTES de "/api/products/:id" para que Express
+  // no confunda "export" con un id de producto y lo mande al handler
+  // equivocado. Usar un xlsx real evita el problema de que Excel, según la
+  // configuración regional, interprete mal el separador de un .csv y meta
+  // todo en una sola columna.
+  const PRODUCTS_XLSX_COLUMNS = [
+    { key: 'id', header: 'ID', width: 8 },
+    { key: 'code', header: 'Código', width: 14 },
+    { key: 'description', header: 'Descripción', width: 32 },
+    { key: 'category', header: 'Categoría', width: 18 },
+    { key: 'size', header: 'Talle', width: 10 },
+    { key: 'size_curve', header: 'Curva de talles', width: 16 },
+    { key: 'colors', header: 'Colores', width: 20 },
+    { key: 'sale_dozen', header: 'Vende x Docena (1/0)', width: 16 },
+    { key: 'sale_pack3', header: 'Vende x Pack x3 (1/0)', width: 16 },
+    { key: 'sale_unit', header: 'Vende x Unidad (1/0)', width: 16 },
+    { key: 'price_dozen', header: 'Precio Docena', width: 14 },
+    { key: 'price_pack3', header: 'Precio Pack x3', width: 14 },
+    { key: 'price_unit', header: 'Precio Unidad', width: 14 },
+    { key: 'stock_immediate', header: 'Stock inmediato', width: 14 },
+    { key: 'stock_order', header: 'Stock a pedido', width: 14 },
   ];
 
-  function csvEscape(value) {
-    const str = value === null || value === undefined ? '' : String(value);
-    if (/[",\n]/.test(str)) return '"' + str.replace(/"/g, '""') + '"';
-    return str;
-  }
+  const PRODUCTS_XLSX_LABELS = Object.fromEntries(PRODUCTS_XLSX_COLUMNS.map(c => [c.key, c.header]));
 
-  app.get('/api/products/export', (req, res) => {
+  app.get('/api/products/export', async (req, res) => {
+    const ExcelJS = require('exceljs');
     const rows = db.prepare('SELECT * FROM products ORDER BY code ASC').all();
-    const lines = [PRODUCTS_CSV_COLUMNS.join(',')];
-    rows.forEach(p => {
-      lines.push(PRODUCTS_CSV_COLUMNS.map(col => csvEscape(p[col])).join(','));
-    });
-    const csv = '﻿' + lines.join('\r\n');
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="productos.csv"');
-    res.send(csv);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Productos');
+    sheet.columns = PRODUCTS_XLSX_COLUMNS.map(c => ({ header: c.header, key: c.key, width: c.width }));
+    sheet.getRow(1).font = { bold: true };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0D3DE' } };
+    rows.forEach(p => sheet.addRow(Object.fromEntries(PRODUCTS_XLSX_COLUMNS.map(c => [c.key, p[c.key]]))));
+    sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="productos.xlsx"');
+    await workbook.xlsx.write(res);
+    res.end();
+  });
+
+  app.get('/api/products/import-log', (req, res) => {
+    const rows = db.prepare(`
+      SELECT l.*, u.name AS created_by_name, u.username AS created_by_username
+      FROM product_import_log l LEFT JOIN users u ON u.id = l.created_by
+      ORDER BY l.created_at DESC LIMIT 30
+    `).all();
+    res.json(rows);
   });
 
   app.get('/api/products/:id', (req, res) => {
@@ -304,27 +329,67 @@ async function start() {
     res.json({ ok: true });
   });
 
-  // Importar productos desde CSV (Excel): actualiza por id si viene en la
-  // fila, o crea uno nuevo si no. Pensado para el flujo exportar -> editar
-  // en Excel -> volver a importar.
+  // Importar productos desde el .xlsx exportado (editado en Excel):
+  // actualiza por id si la fila trae uno existente, o crea un producto
+  // nuevo si no. Queda un registro detallado de qué cambió en cada
+  // importación (product_import_log), visible desde Configuración.
   const PRODUCT_NUMERIC_FIELDS = ['sale_dozen', 'sale_pack3', 'sale_unit', 'price_dozen', 'price_pack3', 'price_unit', 'stock_immediate', 'stock_order'];
+  const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
-  app.post('/api/products/import', (req, res) => {
-    const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : null;
-    if (!rows) return res.status(400).json({ error: 'Faltan las filas a importar' });
+  app.post('/api/products/import', importUpload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Falta el archivo .xlsx a importar' });
+
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    try {
+      await workbook.xlsx.load(req.file.buffer);
+    } catch (e) {
+      return res.status(400).json({ error: 'No se pudo leer el archivo. ¿Es un .xlsx válido exportado desde acá?' });
+    }
+    const sheet = workbook.worksheets[0];
+    if (!sheet) return res.status(400).json({ error: 'El archivo no tiene ninguna hoja' });
+
+    const headerRow = sheet.getRow(1).values; // 1-indexado, values[0] vacío
+    const labelToKey = Object.fromEntries(PRODUCTS_XLSX_COLUMNS.map(c => [c.header, c.key]));
+    const colIndexToKey = {};
+    headerRow.forEach((label, idx) => {
+      if (label && labelToKey[String(label).trim()]) colIndexToKey[idx] = labelToKey[String(label).trim()];
+    });
+    if (Object.keys(colIndexToKey).length === 0) {
+      return res.status(400).json({ error: 'No se reconocieron las columnas del archivo. Usá el que se descarga con "Exportar".' });
+    }
+
+    const rows = [];
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const raw = {};
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        const key = colIndexToKey[colNumber];
+        if (key) raw[key] = cell.value;
+      });
+      if (Object.values(raw).some(v => v !== null && v !== undefined && v !== '')) rows.push(raw);
+    });
+    if (rows.length === 0) return res.status(400).json({ error: 'El archivo no tiene filas con datos' });
 
     let created = 0;
     let updated = 0;
+    const changeLines = [];
     const tx = db.transaction(() => {
       for (const raw of rows) {
         const body = {};
         PRODUCT_FIELDS.forEach(f => {
-          if (raw[f] === undefined || raw[f] === '') { body[f] = null; return; }
-          body[f] = PRODUCT_NUMERIC_FIELDS.includes(f) ? Number(raw[f]) : raw[f];
+          const v = raw[f];
+          if (v === undefined || v === null || v === '') { body[f] = null; return; }
+          body[f] = PRODUCT_NUMERIC_FIELDS.includes(f) ? Number(v) : String(v).trim();
         });
         const id = raw.id ? Number(raw.id) : null;
         const existing = id ? db.prepare('SELECT * FROM products WHERE id = ?').get(id) : null;
         if (existing) {
+          const fieldChanges = PRODUCT_FIELDS.filter(f => body[f] !== null && String(body[f]) !== String(existing[f] ?? ''));
+          if (fieldChanges.length === 0) continue; // fila idéntica a lo que ya había: no cuenta como cambio
+          const desc = `${existing.code || ''} — ${existing.description || ''}`.trim();
+          const changesText = fieldChanges.map(f => `${PRODUCTS_XLSX_LABELS[f] || f}: ${existing[f] ?? '(vacío)'} → ${body[f]}`).join('; ');
+          changeLines.push(`${desc}: ${changesText}`);
           const history = buildPriceHistoryAppend(existing.price_history, body, existing);
           const sets = [...PRODUCT_FIELDS.map(f => `${f} = ?`), 'price_history = ?'];
           const values = [...PRODUCT_FIELDS.map(f => body[f] ?? null), history];
@@ -337,9 +402,15 @@ async function start() {
           const values = [...PRODUCT_FIELDS.map(f => body[f] ?? null), history];
           const placeholders = cols.map(() => '?').join(',');
           db.prepare(`INSERT INTO products (${cols.join(',')}) VALUES (${placeholders})`).run(...values);
+          changeLines.push(`${body.code || ''} — ${body.description || ''}: producto nuevo`);
           created++;
         }
       }
+
+      const summary = `${created} nuevo(s), ${updated} actualizado(s)`;
+      db.prepare(`
+        INSERT INTO product_import_log (created_by, file_name, summary, details) VALUES (?, ?, ?, ?)
+      `).run(req.currentUser.id, req.file.originalname || 'productos.xlsx', summary, changeLines.join('\n'));
     });
     tx();
     res.json({ ok: true, created, updated });

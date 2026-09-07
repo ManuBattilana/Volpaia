@@ -1,8 +1,16 @@
 // Chat interno simple entre los dos usuarios de Volpaia. Es independiente de
 // la campanita de notificaciones: acá solo viven los mensajes que se
 // escriben entre Melany y Darío.
+//
+// "Visto" se marca en un único momento bien concreto: cuando la persona
+// entra a esta pantalla navegando de verdad (tocar "Chat" en el menú, la
+// campanita de mensajes, o abrir la notificación push). No se usa
+// document.visibilityState/hasFocus para esto — esa API del navegador es
+// poco confiable en las PWA instaladas en iOS (puede seguir diciendo
+// "visible" con la app en segundo plano), y terminaba marcando como leído
+// un mensaje que la otra persona nunca llegó a abrir. El polling de acá en
+// adelante solo refresca la lista de mensajes, nunca marca como leído.
 let chatPollInterval = null;
-let chatVisibilityHandler = null;
 
 function renderChat(container, currentUser) {
   container.innerHTML = `
@@ -43,15 +51,6 @@ function renderChat(container, currentUser) {
       }).join('');
     }
     if (scrollToEnd) list.scrollTop = list.scrollHeight;
-    // Solo se marca como "visto" cuando la persona realmente tiene la
-    // pantalla de Chat abierta y a la vista (pestaña activa y enfocada).
-    // Si el chat sigue montado en segundo plano (otra pestaña, minimizado)
-    // el polling de 5s NO debe marcar como leído lo que llegó mientras
-    // tanto — antes se marcaba "Visto" apenas llegaba el mensaje, sin que
-    // nadie lo hubiera abierto de verdad.
-    if (document.visibilityState === 'visible' && document.hasFocus()) {
-      Api.post('/api/messages/read-all').then(() => { if (typeof refreshChatBadge === 'function') refreshChatBadge(); }).catch(() => {});
-    }
   }
 
   document.getElementById('chat-form').addEventListener('submit', async (e) => {
@@ -68,17 +67,13 @@ function renderChat(container, currentUser) {
     }
   });
 
+  // Entrar a esta pantalla ES el gesto de "leer el chat": se carga el
+  // historial y se marca todo como visto en el mismo momento, una sola vez.
   loadMessages(true);
+  Api.post('/api/messages/read-all').then(() => { if (typeof refreshChatBadge === 'function') refreshChatBadge(); }).catch(() => {});
+
   if (chatPollInterval) clearInterval(chatPollInterval);
   chatPollInterval = setInterval(() => loadMessages(false), 5000);
-
-  // Si la pestaña estaba en segundo plano y la persona vuelve a mirarla
-  // con el chat todavía abierto, marcamos como visto ahí mismo en vez de
-  // esperar hasta 5 segundos al próximo polling.
-  if (chatVisibilityHandler) document.removeEventListener('visibilitychange', chatVisibilityHandler);
-  chatVisibilityHandler = () => { if (document.visibilityState === 'visible') loadMessages(false); };
-  document.addEventListener('visibilitychange', chatVisibilityHandler);
-  window.addEventListener('focus', chatVisibilityHandler);
 }
 
 function formatChatTime(iso) {

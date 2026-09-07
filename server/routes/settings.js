@@ -23,5 +23,15 @@ router.put('/', (req, res) => {
   res.json(db.prepare('SELECT * FROM settings WHERE id = 1').get());
 });
 
+// Aparte del resto (que se guarda todo junto desde el formulario grande de
+// Configuración), el logo se sube solo, así que tiene su propio endpoint
+// para no tener que mandar también los demás campos numéricos.
+router.put('/logo', (req, res) => {
+  const { logo_url } = req.body || {};
+  if (!logo_url) return res.status(400).json({ error: 'Falta la URL del logo' });
+  db.prepare('UPDATE settings SET logo_url = ? WHERE id = 1').run(logo_url);
+  res.json(db.prepare('SELECT * FROM settings WHERE id = 1').get());
+});
+
 return router;
 };

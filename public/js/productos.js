@@ -2,96 +2,14 @@ const CATEGORIES = ['Conjunto', 'Bombacha lisa', 'Bombacha estampada', 'Otro'];
 
 const ProdState = { category: null, search: '', viewMode: 'grid', globalSearch: '' };
 
-const PRODUCTS_CSV_COLUMNS = [
-  'id', 'code', 'description', 'category', 'size', 'size_curve', 'colors',
-  'sale_dozen', 'sale_pack3', 'sale_unit',
-  'price_dozen', 'price_pack3', 'price_unit',
-  'stock_immediate', 'stock_order',
-];
-
-// Parser de CSV chico pero correcto con comillas: soporta campos con comas,
-// comillas dobles escapadas ("") y saltos de línea dentro de un campo — lo
-// que exporta Excel al guardar un .csv con textos que tienen comas.
-function parseProductsCsv(text) {
-  const rows = [];
-  let row = [];
-  let field = '';
-  let inQuotes = false;
-  const pushField = () => { row.push(field); field = ''; };
-  const pushRow = () => { pushField(); rows.push(row); row = []; };
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; }
-      } else {
-        field += c;
-      }
-    } else if (c === '"') {
-      inQuotes = true;
-    } else if (c === ',') {
-      pushField();
-    } else if (c === '\n') {
-      pushRow();
-    } else if (c === '\r') {
-      // ignorado, \n hace el corte de línea
-    } else {
-      field += c;
-    }
-  }
-  if (field.length > 0 || row.length > 0) pushRow();
-
-  const nonEmptyRows = rows.filter(r => r.some(cell => cell.trim() !== ''));
-  if (nonEmptyRows.length === 0) return [];
-  const header = nonEmptyRows[0].map(h => h.trim());
-  return nonEmptyRows.slice(1).map(cells => {
-    const obj = {};
-    header.forEach((key, idx) => { obj[key] = (cells[idx] !== undefined ? cells[idx] : '').trim(); });
-    return obj;
-  });
-}
-
 async function renderProductosCategorias(container, onOpenCategory, onGlobalSearch) {
   container.innerHTML = `
-    <div class="page-header">
-      <h2>Productos</h2>
-      <div class="page-actions">
-        <button class="btn btn-secondary" id="btn-export-products">Exportar a Excel</button>
-        <button class="btn btn-secondary" id="btn-import-products">Importar desde Excel</button>
-        <input type="file" id="import-products-file" accept=".csv" hidden>
-      </div>
-    </div>
-    <div id="import-products-msg" style="margin-bottom:10px;font-size:13px;"></div>
+    <div class="page-header"><h2>Productos</h2></div>
     <div class="search-bar">
       <input type="text" id="global-search" placeholder="Buscar producto en todo el catálogo...">
     </div>
     <div class="card-grid" id="category-grid"></div>
   `;
-
-  document.getElementById('btn-export-products').addEventListener('click', () => {
-    window.open('/api/products/export', '_blank');
-  });
-  const importInput = document.getElementById('import-products-file');
-  document.getElementById('btn-import-products').addEventListener('click', () => importInput.click());
-  importInput.addEventListener('change', async () => {
-    const file = importInput.files[0];
-    if (!file) return;
-    const msg = document.getElementById('import-products-msg');
-    msg.style.color = 'var(--text-muted)';
-    msg.textContent = 'Importando...';
-    try {
-      const text = await file.text();
-      const rows = parseProductsCsv(text);
-      const result = await Api.post('/api/products/import', { rows });
-      msg.style.color = '#2e7d32';
-      msg.textContent = `Importación lista: ${result.created} nuevo(s), ${result.updated} actualizado(s).`;
-      renderProductosCategorias(container, onOpenCategory, onGlobalSearch);
-    } catch (err) {
-      msg.style.color = 'var(--danger)';
-      msg.textContent = err.message || 'No se pudo importar el archivo.';
-    }
-    importInput.value = '';
-  });
 
   const summary = await Api.get('/api/products/categories/summary');
   const counts = {};

@@ -50,6 +50,8 @@ a { color: var(--pink-dark); }
   padding: 10px 18px;
   margin-bottom: 18px;
 }
+.brand-logo { max-width: 100%; height: auto; display: block; }
+.login-card .brand-logo { height: 60px; }
 .login-card h1 {
   font-size: 22px;
   color: var(--pink-dark);
@@ -114,12 +116,7 @@ a { color: var(--pink-dark); }
   text-align: center;
   margin-bottom: 26px;
 }
-.sidebar .logo-wrap .brand {
-  color: var(--pink-dark);
-  font-weight: 800;
-  font-size: 20px;
-  letter-spacing: 2px;
-}
+.sidebar .logo-wrap .brand-logo { height: 44px; margin: 0 auto; }
 .sidebar nav {
   display: flex;
   flex-direction: column;
@@ -293,6 +290,9 @@ a { color: var(--pink-dark); }
 .btn-secondary:hover { background: #007c86; }
 .btn-danger { background: var(--danger); color: var(--white); }
 .btn-danger:hover { background: #a53225; }
+.btn-warm { background: #ef6c00; color: var(--white); }
+.btn-warm:hover { background: #d15f00; }
+.btn:disabled { opacity: 0.6; cursor: default; pointer-events: none; }
 .btn-ghost {
   background: transparent;
   border: 1px solid var(--pink-dark);
@@ -501,10 +501,8 @@ a { color: var(--pink-dark); }
 .whatsapp-circle:hover { background: #007c86; }
 .whatsapp-circle svg { width: 20px; height: 20px; fill: var(--white); }
 
-.posventa-row { cursor: default; flex-wrap: wrap; }
-.posventa-main { cursor: pointer; flex: 1; min-width: 180px; }
-.posventa-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.posventa-actions .btn svg { width: 15px; height: 15px; fill: currentColor; }
+.posventa-row { cursor: default; flex-wrap: wrap; align-items: center; }
+.posventa-main { flex: 1; min-width: 180px; }
 
 /* ---------- Detail views ---------- */
 .detail-header {
@@ -779,6 +777,11 @@ a { color: var(--pink-dark); }
   justify-content: center;
   padding: 0 4px;
 }
+/* Como .notif-badge define "display", el navegador ignora el atributo
+   nativo [hidden] a menos que lo pisemos de nuevo acá — si no, el
+   contador queda siempre visible (mostrando "0") aunque no haya nada
+   pendiente. */
+.notif-badge[hidden] { display: none; }
 .notif-dropdown {
   position: absolute;
   top: 50px;

@@ -174,8 +174,7 @@ function draw() {
   } else if (page === 'posventa') {
     renderPosventa(
       content,
-      (orderId) => navigateTo('posventa-detalle', { id: orderId }),
-      (client) => navigateTo('presupuesto-nuevo', { preset: { type: 'client', record: client } })
+      (orderId) => navigateTo('posventa-detalle', { id: orderId })
     );
   } else if (page === 'posventa-detalle') {
     renderPosventaDetail(

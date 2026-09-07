@@ -3,7 +3,7 @@ function renderLogin(onSuccess) {
   app.innerHTML = `
     <div class="login-screen">
       <div class="login-card">
-        <div class="logo-wrap"><span class="brand">VOLPAIA</span></div>
+        <div class="logo-wrap"><img src="/img/logo.png" alt="Volpaia" class="brand-logo"></div>
         <h1>Gestión interna</h1>
         <p class="subtitle">Ingresá con tu usuario y contraseña</p>
         <form id="login-form">

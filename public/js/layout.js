@@ -2,6 +2,7 @@ const SHIPPING_TYPES = ['Domicilio', 'Sucursal', 'Envío propio', 'Retiro en fá
 
 const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', enabled: true },
+  { key: 'notificaciones', label: 'Notificaciones', enabled: true },
   { key: 'contactos', label: 'Contactos', enabled: true },
   { key: 'clientes', label: 'Clientes', enabled: true },
   { key: 'productos', label: 'Productos', enabled: true },
@@ -79,7 +80,7 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
     <div class="layout">
       <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
       <aside class="sidebar" id="sidebar">
-        <div class="logo-wrap"><span class="brand">VOLPAIA</span></div>
+        <div class="logo-wrap"><img src="/img/logo.png" alt="Volpaia" class="brand-logo" id="sidebar-logo"></div>
         <nav id="sidebar-nav"></nav>
       </aside>
       <div class="main-column">
@@ -141,6 +142,15 @@ function renderLayout(user, activeKey, onNavigate, onLogout) {
   document.getElementById('logout-btn').addEventListener('click', onLogout);
 
   document.getElementById('chat-bell').addEventListener('click', () => onNavigate('chat'));
+
+  // Si en Configuración se subió un logo propio, se usa ese en vez del que
+  // viene por defecto con el sistema.
+  Api.get('/api/settings').then(s => {
+    if (s.logo_url) {
+      const img = document.getElementById('sidebar-logo');
+      if (img) img.src = s.logo_url;
+    }
+  }).catch(() => {});
 
   setupGlobalSearch();
   setupNotificationBell();
