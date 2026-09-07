@@ -119,7 +119,7 @@ const CLIENT_SECTIONS = [
   {
     title: 'Envío',
     fields: [
-      { key: 'shipping_type', label: 'Tipo de envío', type: 'select', options: ['', 'Domicilio', 'Sucursal'] },
+      { key: 'shipping_type', label: 'Tipo de envío', type: 'select', options: ['', ...SHIPPING_TYPES] },
       { key: 'shipping_carrier', label: 'Transporte habitual' },
       { key: 'shipping_address', label: 'Dirección de envío (si es distinta)', full: true },
     ]

@@ -1,3 +1,5 @@
+const SHIPPING_TYPES = ['Domicilio', 'Sucursal', 'Envío propio', 'Retiro en fábrica'];
+
 const MENU_ITEMS = [
   { key: 'inicio', label: 'Inicio', enabled: true },
   { key: 'contactos', label: 'Contactos', enabled: true },
@@ -12,6 +14,55 @@ const MENU_ITEMS = [
 
 const BellIcon = `<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>`;
 const LogoutIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
+const UploadIcon = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`;
+const FileIconSmall = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+const XIconSmall = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+// Campo de archivo con estilo propio (en vez del <input type=file> nativo,
+// que se ve muy distinto entre navegadores y no deja ver ni cambiar el
+// archivo elegido sin volver a abrir el explorador). `id` es el id del
+// <input> real (oculto); se usa para leer el archivo al enviar el
+// formulario con la misma lógica de siempre (document.getElementById(id).files[0]).
+function fileFieldHtml(id, label, opts) {
+  const accept = (opts && opts.accept) || 'image/*,application/pdf';
+  return `
+    <div class="field${opts && opts.full ? ' full' : ''}">
+      <label>${escapeHtml(label)}</label>
+      <div class="file-field" id="${id}-wrap">
+        <input type="file" id="${id}" accept="${accept}" hidden>
+        <button type="button" class="file-field-btn" id="${id}-btn">${UploadIcon} Elegir archivo</button>
+        <span class="file-field-chosen" id="${id}-chosen" hidden>
+          ${FileIconSmall}
+          <span class="file-field-name" id="${id}-name"></span>
+          <button type="button" class="file-field-clear" id="${id}-clear" title="Quitar archivo">${XIconSmall}</button>
+        </span>
+      </div>
+    </div>
+  `;
+}
+
+function initFileField(id) {
+  const input = document.getElementById(id);
+  const btn = document.getElementById(`${id}-btn`);
+  const chosen = document.getElementById(`${id}-chosen`);
+  const nameEl = document.getElementById(`${id}-name`);
+  const clearBtn = document.getElementById(`${id}-clear`);
+  if (!input) return;
+
+  btn.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    if (input.files && input.files[0]) {
+      nameEl.textContent = input.files[0].name;
+      btn.hidden = true;
+      chosen.hidden = false;
+    }
+  });
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    btn.hidden = false;
+    chosen.hidden = true;
+  });
+}
 
 let notifPollInterval = null;
 let currentOnNavigate = null;

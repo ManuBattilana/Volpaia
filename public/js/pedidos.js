@@ -151,6 +151,13 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
   }
 
   function draw() {
+    // Al cambiar de paso el contenido de la pantalla se vuelve más corto,
+    // pero el scroll del panel quedaba donde estaba antes (más abajo), así
+    // que había que desplazarse a mano para ver qué pasó. Se vuelve arriba
+    // en cada redibujado del detalle.
+    const scrollEl = document.querySelector('.content');
+    if (scrollEl) scrollEl.scrollTop = 0;
+
     if (order.cancelled) return drawCancelled();
     if (editingItems) return drawEditItems();
 
@@ -534,7 +541,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         <h3>Enviar a facturación</h3>
         <p style="font-size:13px;color:var(--text-muted);">Adjuntá la Factura X, los datos para transferir y el monto de la factura.</p>
         <div class="field-grid">
-          <div class="field"><label>Factura X (foto o PDF)</label><input type="file" id="field-invoice" accept="image/*,application/pdf"></div>
+          ${fileFieldHtml('field-invoice', 'Factura X (foto o PDF)')}
           <div class="field"><label>Monto de la Factura X</label><input type="number" step="0.01" id="field-amount-invoice"></div>
           <div class="field full">
             <label>Datos para transferir</label>
@@ -543,6 +550,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         </div>
         <button class="btn btn-primary" id="btn-advance" style="margin-top:14px;">Guardar y continuar</button>
       `;
+      initFileField('field-invoice');
       document.getElementById('btn-advance').addEventListener('click', async () => {
         try {
           const invoiceUrl = await uploadField('field-invoice');
@@ -585,7 +593,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
           ? `<p>Comprobante cargado: <a href="${order.payment_attachment_url}" target="_blank">Ver</a></p>`
           : `<p style="font-size:13px;color:var(--text-muted);">Subí el comprobante que te mandó el cliente y el monto pagado.</p>
             <div class="field-grid">
-              <div class="field"><label>Comprobante de pago (foto o PDF)</label><input type="file" id="field-payment" accept="image/*,application/pdf"></div>
+              ${fileFieldHtml('field-payment', 'Comprobante de pago (foto o PDF)')}
               <div class="field"><label>Monto del comprobante</label><input type="number" step="0.01" id="field-amount-payment"></div>
             </div>
             <button class="btn btn-secondary" id="btn-attach-payment" style="margin-top:10px;">Adjuntar comprobante</button>`
@@ -593,6 +601,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         <p style="font-size:13px;color:var(--text-muted);margin-top:14px;">Cuando esté todo bien, confirmá el pago para pasar a preparación.</p>
         <button class="btn btn-primary" id="btn-confirm-payment" ${!order.payment_attachment_url ? 'disabled' : ''}>Confirmar pago</button>
       `;
+      if (!order.payment_attachment_url) initFileField('field-payment');
       const attachBtn = document.getElementById('btn-attach-payment');
       if (attachBtn) {
         attachBtn.addEventListener('click', async () => {
@@ -636,10 +645,11 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         <div class="field-grid">
           <div class="field"><label>Fecha de despacho</label><input type="date" id="field-shipping-date" value="${new Date().toISOString().slice(0,10)}"></div>
           <div class="field"><label>Número de guía</label><input type="text" id="field-tracking" class="text-input"></div>
-          <div class="field full"><label>Comprobante de envío (foto o PDF)</label><input type="file" id="field-shipping-proof" accept="image/*,application/pdf"></div>
+          ${fileFieldHtml('field-shipping-proof', 'Comprobante de envío (foto o PDF)', { full: true })}
         </div>
         <button class="btn btn-primary" id="btn-advance" style="margin-top:14px;">Marcar como despachado</button>
       `;
+      initFileField('field-shipping-proof');
       document.getElementById('btn-advance').addEventListener('click', async () => {
         try {
           const url = await uploadField('field-shipping-proof');
@@ -657,9 +667,15 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
     }
 
     if (order.status_index === 6) {
+      const phoneDigits = (order.client && order.client.phone || '').replace(/[^0-9]/g, '');
+      const trackingLine = order.tracking_number ? ` Número de guía: ${order.tracking_number}.` : '';
+      const notifyText = encodeURIComponent(`¡Hola! Te contamos que tu pedido #${order.order_number} ya fue despachado.${trackingLine}`);
       el.innerHTML = `
         <h3>Despachado</h3>
-        <p style="font-size:13px;color:var(--text-muted);">Cuando el pedido ya salió, marcalo como finalizado para calcular la comisión de la venta.</p>
+        <p style="font-size:13px;color:var(--text-muted);">Avisale al cliente que su pedido salió, y cuando esté todo listo marcalo como finalizado para calcular la comisión de la venta.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+          ${phoneDigits ? `<a class="btn btn-secondary" href="https://wa.me/${phoneDigits}?text=${notifyText}" target="_blank">WhatsApp al cliente: pedido despachado</a>` : ''}
+        </div>
         <button class="btn btn-primary" id="btn-advance">Marcar como finalizado</button>
       `;
       document.getElementById('btn-advance').addEventListener('click', () => {

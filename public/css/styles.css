@@ -878,6 +878,56 @@ a { color: var(--pink-dark); }
 .prep-callout h3 { color: var(--cyan); }
 .prep-callout p { font-size: 13.5px; color: var(--text-muted); margin: 8px 0 14px; }
 
+/* ---------- Campo de archivo con estilo propio ---------- */
+.file-field { display: flex; align-items: center; }
+.file-field-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1.5px dashed var(--pink-dark);
+  background: var(--pink-light);
+  color: var(--pink-dark);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.file-field-btn:hover { background: var(--white); }
+.file-field-chosen {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  color: var(--text-dark, #333);
+  font-size: 13.5px;
+  max-width: 100%;
+}
+.file-field-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+.file-field-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: var(--pink-light);
+  color: var(--pink-dark);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.file-field-clear:hover { background: var(--danger); color: var(--white); }
+.file-field-btn[hidden], .file-field-chosen[hidden] { display: none; }
+
 /* ---------- Chat interno ---------- */
 .chat-box {
   display: flex;

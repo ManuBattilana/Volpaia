@@ -31,7 +31,14 @@ function setupItemsGrid(bodyEl, totalEl, items) {
 
   function draw() {
     bodyEl.innerHTML = items.map((it, idx) => {
-      const allowed = allowedPresentations(it.product);
+      // Un ítem que ya venía cargado (de un presupuesto existente) trae el
+      // producto solo con id/code/description, sin los flags
+      // sale_dozen/sale_pack3/sale_unit — allowedPresentations() daría una
+      // lista vacía y el <select> quedaría sin opciones. En ese caso se
+      // dejan elegir las tres presentaciones.
+      const allowed = it.product.sale_dozen === undefined && it.product.sale_pack3 === undefined && it.product.sale_unit === undefined
+        ? PRESENTATIONS
+        : allowedPresentations(it.product);
       const subtotal = it.unitPrice * it.quantity;
       return `
         <tr data-idx="${idx}" style="border-bottom:1px solid var(--border);">
@@ -54,7 +61,12 @@ function setupItemsGrid(bodyEl, totalEl, items) {
       row.querySelector('[data-role="presentation"]').addEventListener('change', (e) => {
         const pres = PRESENTATIONS.find(p => p.key === e.target.value);
         items[idx].presentation = e.target.value;
-        items[idx].unitPrice = items[idx].product[pres.priceField];
+        // Un ítem preexistente no trae los precios por presentación del
+        // producto (solo id/code/description) — si no se sabe el precio de
+        // lista para la nueva presentación, se deja el precio como estaba
+        // en vez de pisarlo con "undefined".
+        const listPrice = items[idx].product[pres.priceField];
+        if (listPrice !== undefined) items[idx].unitPrice = listPrice;
         draw();
       });
       row.querySelector('[data-role="quantity"]').addEventListener('input', (e) => {
@@ -202,8 +214,7 @@ function personFieldsGrid(person, idPrefix) {
         <label>Tipo de envío</label>
         <select id="${idPrefix}shipping_type">
           <option value="">—</option>
-          <option value="Domicilio" ${person.shipping_type === 'Domicilio' ? 'selected' : ''}>Domicilio</option>
-          <option value="Sucursal" ${person.shipping_type === 'Sucursal' ? 'selected' : ''}>Sucursal</option>
+          ${SHIPPING_TYPES.map(t => `<option value="${t}" ${person.shipping_type === t ? 'selected' : ''}>${t}</option>`).join('')}
         </select>
       </div>
       <div class="field"><label>Transporte habitual</label><input type="text" id="${idPrefix}shipping_carrier" class="text-input" value="${escapeHtml(person.shipping_carrier || '')}"></div>
