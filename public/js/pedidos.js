@@ -242,7 +242,7 @@ async function renderPedidoForm(container, onBack, onCreated) {
             alert(`El producto ${p.code} no tiene ninguna presentación de venta habilitada.`);
             return;
           }
-          items.push({ product: p, presentation: allowed[0].key, quantity: 1, unitPrice: p[allowed[0].priceField] });
+          items.push({ product: p, presentation: allowed[0].key, quantity: 0, unitPrice: p[allowed[0].priceField] });
           drawItems();
           resultsEl.innerHTML = '';
           productSearch.value = '';
@@ -250,6 +250,23 @@ async function renderPedidoForm(container, onBack, onCreated) {
       });
     }, 250);
   });
+
+  // Recalcula solo el subtotal de la fila y el total general, sin
+  // reconstruir los <input>: si se vuelve a pintar el valor del input en
+  // cada tecleo (como hacía antes con drawItems()), borrar el "1" por
+  // defecto para escribir otro número queda bloqueado porque el número
+  // vacío se convierte al instante de nuevo en 1.
+  function updateItemsTotals() {
+    const body = document.getElementById('items-body');
+    items.forEach((it, idx) => {
+      const row = body.querySelector(`tr[data-idx="${idx}"]`);
+      if (!row) return;
+      const subtotal = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
+      row.querySelector('[data-label="Subtotal"]').textContent = formatMoney(subtotal);
+    });
+    const total = items.reduce((sum, it) => sum + (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0), 0);
+    document.getElementById('items-total').textContent = 'Total: ' + formatMoney(total);
+  }
 
   function drawItems() {
     const body = document.getElementById('items-body');
@@ -264,7 +281,7 @@ async function renderPedidoForm(container, onBack, onCreated) {
               ${allowed.map(p => `<option value="${p.key}" ${p.key === it.presentation ? 'selected' : ''}>${p.key}</option>`).join('')}
             </select>
           </td>
-          <td style="padding:8px 4px;" data-label="Cantidad"><input type="number" min="1" step="1" data-role="quantity" value="${it.quantity}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
+          <td style="padding:8px 4px;" data-label="Cantidad"><input type="number" min="0" step="1" data-role="quantity" value="${it.quantity}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
           <td style="padding:8px 4px;" data-label="Precio unit."><input type="number" min="0" step="0.01" data-role="price" value="${it.unitPrice}" style="width:100px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
           <td style="padding:8px 4px;font-weight:600;" data-label="Subtotal">${formatMoney(subtotal)}</td>
           <td style="padding:8px 4px;"><button class="btn btn-danger" data-role="remove" style="padding:4px 10px;font-size:12px;">Quitar</button></td>
@@ -281,12 +298,18 @@ async function renderPedidoForm(container, onBack, onCreated) {
         drawItems();
       });
       row.querySelector('[data-role="quantity"]').addEventListener('input', (e) => {
-        items[idx].quantity = Number(e.target.value) || 1;
-        drawItems();
+        items[idx].quantity = e.target.value === '' ? '' : Number(e.target.value);
+        updateItemsTotals();
+      });
+      row.querySelector('[data-role="quantity"]').addEventListener('blur', (e) => {
+        if (!items[idx].quantity || items[idx].quantity <= 0) { items[idx].quantity = 1; e.target.value = 1; updateItemsTotals(); }
       });
       row.querySelector('[data-role="price"]').addEventListener('input', (e) => {
-        items[idx].unitPrice = Number(e.target.value) || 0;
-        drawItems();
+        items[idx].unitPrice = e.target.value === '' ? '' : Number(e.target.value);
+        updateItemsTotals();
+      });
+      row.querySelector('[data-role="price"]').addEventListener('blur', (e) => {
+        if (items[idx].unitPrice === '' || items[idx].unitPrice === null || isNaN(items[idx].unitPrice)) { items[idx].unitPrice = 0; e.target.value = 0; updateItemsTotals(); }
       });
       row.querySelector('[data-role="remove"]').addEventListener('click', () => {
         items.splice(idx, 1);
@@ -294,8 +317,7 @@ async function renderPedidoForm(container, onBack, onCreated) {
       });
     });
 
-    const total = items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
-    document.getElementById('items-total').textContent = 'Total: ' + formatMoney(total);
+    updateItemsTotals();
   }
 
   document.getElementById('btn-save-order').addEventListener('click', async () => {
@@ -562,7 +584,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
             const p = results.find(r => r.id === Number(el.dataset.productId));
             const allowed = allowedPresentations(p);
             if (allowed.length === 0) { alert(`El producto ${p.code} no tiene presentaciones habilitadas.`); return; }
-            editState.items.push({ product: p, presentation: allowed[0].key, quantity: 1, unitPrice: p[allowed[0].priceField] });
+            editState.items.push({ product: p, presentation: allowed[0].key, quantity: 0, unitPrice: p[allowed[0].priceField] });
             drawEditRows();
             resultsEl.innerHTML = '';
             productSearch.value = '';
@@ -570,6 +592,18 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         });
       }, 250);
     });
+
+    function updateEditTotals() {
+      const body = document.getElementById('items-body');
+      editState.items.forEach((it, idx) => {
+        const row = body.querySelector(`tr[data-idx="${idx}"]`);
+        if (!row) return;
+        const subtotal = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
+        row.querySelector('[data-label="Subtotal"]').textContent = formatMoney(subtotal);
+      });
+      const total = editState.items.reduce((sum, it) => sum + (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0), 0);
+      document.getElementById('items-total').textContent = 'Total: ' + formatMoney(total);
+    }
 
     function drawEditRows() {
       const body = document.getElementById('items-body');
@@ -586,7 +620,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
                 ${allowed.map(p => `<option value="${p.key}" ${p.key === it.presentation ? 'selected' : ''}>${p.key}</option>`).join('')}
               </select>
             </td>
-            <td style="padding:8px 4px;" data-label="Cantidad"><input type="number" min="1" step="1" data-role="quantity" value="${it.quantity}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
+            <td style="padding:8px 4px;" data-label="Cantidad"><input type="number" min="0" step="1" data-role="quantity" value="${it.quantity}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
             <td style="padding:8px 4px;" data-label="Precio unit."><input type="number" min="0" step="0.01" data-role="price" value="${it.unitPrice}" style="width:100px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
             <td style="padding:8px 4px;font-weight:600;" data-label="Subtotal">${formatMoney(subtotal)}</td>
             <td style="padding:8px 4px;"><button class="btn btn-danger" data-role="remove" style="padding:4px 10px;font-size:12px;">Quitar</button></td>
@@ -597,13 +631,24 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       body.querySelectorAll('tr').forEach(row => {
         const idx = Number(row.dataset.idx);
         row.querySelector('[data-role="presentation"]').addEventListener('change', (e) => { editState.items[idx].presentation = e.target.value; drawEditRows(); });
-        row.querySelector('[data-role="quantity"]').addEventListener('input', (e) => { editState.items[idx].quantity = Number(e.target.value) || 1; drawEditRows(); });
-        row.querySelector('[data-role="price"]').addEventListener('input', (e) => { editState.items[idx].unitPrice = Number(e.target.value) || 0; drawEditRows(); });
+        row.querySelector('[data-role="quantity"]').addEventListener('input', (e) => {
+          editState.items[idx].quantity = e.target.value === '' ? '' : Number(e.target.value);
+          updateEditTotals();
+        });
+        row.querySelector('[data-role="quantity"]').addEventListener('blur', (e) => {
+          if (!editState.items[idx].quantity || editState.items[idx].quantity <= 0) { editState.items[idx].quantity = 1; e.target.value = 1; updateEditTotals(); }
+        });
+        row.querySelector('[data-role="price"]').addEventListener('input', (e) => {
+          editState.items[idx].unitPrice = e.target.value === '' ? '' : Number(e.target.value);
+          updateEditTotals();
+        });
+        row.querySelector('[data-role="price"]').addEventListener('blur', (e) => {
+          if (editState.items[idx].unitPrice === '' || editState.items[idx].unitPrice === null || isNaN(editState.items[idx].unitPrice)) { editState.items[idx].unitPrice = 0; e.target.value = 0; updateEditTotals(); }
+        });
         row.querySelector('[data-role="remove"]').addEventListener('click', () => { editState.items.splice(idx, 1); drawEditRows(); });
       });
 
-      const total = editState.items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
-      document.getElementById('items-total').textContent = 'Total: ' + formatMoney(total);
+      updateEditTotals();
     }
     drawEditRows();
 
