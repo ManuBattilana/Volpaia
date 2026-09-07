@@ -421,6 +421,29 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   // esta nota en el mismo historial en vez de crear una tabla aparte.
   ensureColumn('order_status_history', 'note', 'TEXT');
 
+  // Libreta de stock: cada línea es un movimiento (entrada, salida o
+  // ajuste por conteo físico) de un producto, siempre en "unidades sueltas"
+  // (la prenda individual) para poder convertir sin problema entre Docena/
+  // Pack x3/Unidad — el stock actual de un producto es simplemente la suma
+  // de quantity_units de todos sus movimientos. `related_order_id` se usa
+  // cuando el movimiento nace de un pedido (se descontó stock al confirmar,
+  // o se cubrió una fabricación pendiente); si es null es un movimiento
+  // suelto (fabricación propia sin pedido, venta externa de Damián, ajuste
+  // de conteo, etc).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stock_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      quantity_units REAL NOT NULL,
+      reason TEXT,
+      note TEXT,
+      related_order_id INTEGER REFERENCES orders(id),
+      created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
   // Seed default user (Melany, owner role) if none exists
   const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
   if (userCount === 0) {

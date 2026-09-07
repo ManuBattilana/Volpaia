@@ -16,6 +16,7 @@ const messagesRouterFactory = require('./routes/messages');
 const pushRouterFactory = require('./routes/push');
 const quotesRouterFactory = require('./routes/quotes');
 const searchRouterFactory = require('./routes/search');
+const stockRouterFactory = require('./routes/stock');
 const { checkReminders } = require('./lib/reminders');
 const { ensureVapidKeys } = require('./lib/push');
 
@@ -429,6 +430,7 @@ async function start() {
   app.use('/api/messages', requireAuth, messagesRouterFactory(db));
   app.use('/api/push', requireAuth, pushRouterFactory(db));
   app.use('/api/search', requireAuth, searchRouterFactory(db));
+  app.use('/api/stock', requireAuth, stockRouterFactory(db));
 
   // Borrar todos los datos de prueba/carga (clientes, productos, contactos,
   // pedidos, presupuestos, comisiones, notificaciones, mensajes e historial

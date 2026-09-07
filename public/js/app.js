@@ -107,6 +107,10 @@ function draw() {
       (cat) => navigateTo('productos-lista', { category: cat }),
       (q) => navigateTo('productos-lista', { category: 'Todas', search: q })
     );
+  } else if (page === 'stock') {
+    renderStockList(content, (id) => navigateTo('stock-detalle', { id }));
+  } else if (page === 'stock-detalle') {
+    renderStockDetail(content, Nav.route.id, () => navigateTo('stock'));
   } else if (page === 'productos-lista') {
     renderProductosLista(
       content,
