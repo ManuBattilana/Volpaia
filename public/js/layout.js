@@ -3,6 +3,7 @@ const MENU_ITEMS = [
   { key: 'contactos', label: 'Contactos', enabled: true },
   { key: 'clientes', label: 'Clientes', enabled: true },
   { key: 'productos', label: 'Productos', enabled: true },
+  { key: 'presupuestos', label: 'Presupuestos', enabled: true },
   { key: 'pedidos', label: 'Pedidos', enabled: true },
   { key: 'comisiones', label: 'Comisiones', enabled: true },
   { key: 'chat', label: 'Chat', enabled: true },

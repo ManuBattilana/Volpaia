@@ -36,7 +36,8 @@ async function handleLogout() {
 const PAGE_MODULE = {
   clientes: 'clientes', 'cliente-detalle': 'clientes',
   productos: 'productos', 'productos-lista': 'productos', 'producto-detalle': 'productos',
-  pedidos: 'pedidos', 'pedido-nuevo': 'pedidos', 'pedido-detalle': 'pedidos',
+  pedidos: 'pedidos', 'pedido-detalle': 'pedidos',
+  presupuestos: 'presupuestos', 'presupuesto-nuevo': 'presupuestos', 'presupuesto-detalle': 'presupuestos',
   contactos: 'contactos', 'contacto-detalle': 'contactos',
 };
 
@@ -45,6 +46,7 @@ function resetModuleSearch(moduleKey) {
   if (moduleKey === 'productos' && typeof ProdState !== 'undefined') { ProdState.search = ''; ProdState.globalSearch = ''; }
   if (moduleKey === 'pedidos' && typeof OrdersState !== 'undefined') OrdersState.search = '';
   if (moduleKey === 'contactos' && typeof ContactsState !== 'undefined') ContactsState.search = '';
+  if (moduleKey === 'presupuestos' && typeof QuotesState !== 'undefined') QuotesState.search = '';
 }
 
 function navigateTo(page, params) {
@@ -68,7 +70,8 @@ function draw() {
       content,
       Nav.route.id,
       () => navigateTo('clientes'),
-      () => navigateTo('clientes')
+      () => navigateTo('clientes'),
+      (client) => navigateTo('presupuesto-nuevo', { preset: { type: 'client', record: client } })
     );
   } else if (page === 'productos') {
     renderProductosCategorias(
@@ -96,14 +99,8 @@ function draw() {
     renderPedidosList(
       content,
       (id) => navigateTo('pedido-detalle', { id }),
-      () => navigateTo('pedido-nuevo'),
+      () => navigateTo('presupuesto-nuevo'),
       Nav.route.statusFilter
-    );
-  } else if (page === 'pedido-nuevo') {
-    renderPedidoForm(
-      content,
-      () => navigateTo('pedidos'),
-      (id) => navigateTo('pedido-detalle', { id })
     );
   } else if (page === 'pedido-detalle') {
     renderPedidoDetail(
@@ -111,6 +108,26 @@ function draw() {
       Nav.route.id,
       Nav.user,
       () => navigateTo('pedidos')
+    );
+  } else if (page === 'presupuestos') {
+    renderPresupuestosList(
+      content,
+      (id) => navigateTo('presupuesto-detalle', { id }),
+      () => navigateTo('presupuesto-nuevo')
+    );
+  } else if (page === 'presupuesto-nuevo') {
+    renderPresupuestoForm(
+      content,
+      () => navigateTo('presupuestos'),
+      (id) => navigateTo('presupuesto-detalle', { id }),
+      Nav.route.preset
+    );
+  } else if (page === 'presupuesto-detalle') {
+    renderPresupuestoDetail(
+      content,
+      Nav.route.id,
+      () => navigateTo('presupuestos'),
+      (orderId) => navigateTo('pedido-detalle', { id: orderId })
     );
   } else if (page === 'configuracion') {
     renderConfiguracion(content, Nav.user);
@@ -122,7 +139,8 @@ function draw() {
       Nav.route.id,
       () => navigateTo('contactos'),
       () => navigateTo('contactos'),
-      (clientId) => navigateTo('cliente-detalle', { id: clientId })
+      (clientId) => navigateTo('cliente-detalle', { id: clientId }),
+      (contact) => navigateTo('presupuesto-nuevo', { preset: { type: 'contact', record: contact } })
     );
   } else if (page === 'comisiones') {
     renderComisiones(content, (orderId) => navigateTo('pedido-detalle', { id: orderId }));

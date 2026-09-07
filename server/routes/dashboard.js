@@ -3,6 +3,7 @@ const { checkReminders } = require('../lib/reminders');
 const ordersRouterFactory = require('./orders');
 
 const STATUSES = ordersRouterFactory.STATUSES;
+const LAST_INDEX = ordersRouterFactory.LAST_INDEX;
 
 module.exports = function dashboardRouterFactory(db) {
 const router = express.Router();
@@ -13,10 +14,10 @@ router.get('/', (req, res) => {
   const pendingRows = db.prepare(`
     SELECT status_index, COUNT(*) AS count
     FROM orders
-    WHERE cancelled = 0 AND finalized = 0
+    WHERE cancelled = 0 AND status_index < ?
     GROUP BY status_index
     ORDER BY status_index ASC
-  `).all();
+  `).all(LAST_INDEX);
   const pendingByStatus = pendingRows.map(r => ({
     status_index: r.status_index,
     label: STATUSES[r.status_index],

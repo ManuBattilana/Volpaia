@@ -248,6 +248,45 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS quotes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  quote_number INTEGER UNIQUE NOT NULL,
+  contact_id INTEGER REFERENCES contacts(id),
+  client_id INTEGER REFERENCES clients(id),
+  status TEXT NOT NULL DEFAULT 'Pendiente',
+  first_name TEXT,
+  last_name TEXT,
+  business_name TEXT,
+  fiscal_name TEXT,
+  fiscal_id TEXT,
+  email TEXT,
+  phone TEXT,
+  address TEXT,
+  locality TEXT,
+  postal_code TEXT,
+  province TEXT,
+  shipping_type TEXT,
+  shipping_carrier TEXT,
+  shipping_address TEXT,
+  notes TEXT,
+  pdf_path TEXT,
+  converted_client_id INTEGER REFERENCES clients(id),
+  converted_order_id INTEGER REFERENCES orders(id),
+  created_by INTEGER,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO counters (name, value) VALUES ('quote_number', 0);
+
+CREATE TABLE IF NOT EXISTS quote_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  quote_id INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  quantity REAL NOT NULL,
+  presentation TEXT NOT NULL,
+  unit_price REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   sender_id INTEGER NOT NULL REFERENCES users(id),
@@ -297,6 +336,13 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   // suscripciones ya hechas por los navegadores en cada reinicio.
   ensureColumn('settings', 'vapid_public_key', 'TEXT');
   ensureColumn('settings', 'vapid_private_key', 'TEXT');
+
+  // Flujo nuevo: todo pedido nace de un Presupuesto ya confirmado (ver
+  // server/routes/quotes.js), así que llega directo a "Pedido confirmado"
+  // con un link al presupuesto de origen (para reusar su PDF con precios).
+  // El CBU reemplaza al viejo adjunto de "datos de transferencia".
+  ensureColumn('orders', 'quote_id', 'INTEGER');
+  ensureColumn('orders', 'cbu', 'TEXT');
   // Cualquier pedido que haya quedado del flujo viejo de 11 pasos (todos de
   // prueba) se lleva al principio del flujo nuevo para no dejarlo en un
   // índice de estado que ya no existe.

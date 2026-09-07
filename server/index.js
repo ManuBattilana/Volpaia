@@ -14,6 +14,7 @@ const commissionsRouterFactory = require('./routes/commissions');
 const dashboardRouterFactory = require('./routes/dashboard');
 const messagesRouterFactory = require('./routes/messages');
 const pushRouterFactory = require('./routes/push');
+const quotesRouterFactory = require('./routes/quotes');
 const { checkReminders } = require('./lib/reminders');
 const { ensureVapidKeys } = require('./lib/push');
 
@@ -274,8 +275,10 @@ async function start() {
     res.json({ ok: true });
   });
 
-  // ---------- Orders / Notifications / Settings / Users / Contacts API ----------
-  app.use('/api/orders', requireAuth, ordersRouterFactory(db, UPLOAD_DIR));
+  // ---------- Orders / Quotes / Notifications / Settings / Users / Contacts API ----------
+  const orderHelpers = ordersRouterFactory.createOrderHelpers(db, UPLOAD_DIR);
+  app.use('/api/orders', requireAuth, ordersRouterFactory(db, UPLOAD_DIR, orderHelpers));
+  app.use('/api/quotes', requireAuth, quotesRouterFactory(db, UPLOAD_DIR, orderHelpers));
   app.use('/api/notifications', requireAuth, notificationsRouterFactory(db));
   app.use('/api/settings', requireAuth, settingsRouterFactory(db));
   app.use('/api/users', requireAuth, usersRouterFactory(db));

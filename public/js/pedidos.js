@@ -1,15 +1,15 @@
 const ORDER_STATUSES = [
-  'Pedido creado',
   'Pedido confirmado',
-  'Datos enviados al cliente',
+  'Enviar a facturación',
+  'Facturado',
   'Esperando comprobante',
-  'Pago confirmado',
   'En preparación',
   'Listo para despachar',
   'Despachado',
+  'Finalizado',
   'Seguimiento posventa',
 ];
-const DESPACHADO_INDEX = 7;
+const FINALIZADO_INDEX = 7;
 const LAST_INDEX = ORDER_STATUSES.length - 1;
 
 const PRESENTATIONS = [
@@ -28,15 +28,13 @@ const ImageFileIcon = `<svg viewBox="0 0 24 24" width="18" height="18" fill="non
 function isPdfUrl(url) { return /\.pdf(\?|$)/i.test(url || ''); }
 
 // Junta en un solo lugar todos los comprobantes que se van adjuntando a lo
-// largo del flujo del pedido (Factura X, transferencia, pago, foto de
-// envío), para que se puedan ver siempre desde la sección "Archivos" sin
-// depender de en qué paso está el pedido ahora mismo — antes cada adjunto
-// solo se mostraba mientras el pedido estaba en el paso en el que se había
-// cargado, y después quedaba invisible para todos.
+// largo del flujo del pedido (Presupuesto, Factura X, pago, envío), para
+// que se puedan ver siempre desde la sección "Archivos" sin depender de en
+// qué paso está el pedido ahora mismo.
 function orderAttachments(order) {
   const list = [
+    { label: 'Presupuesto', url: order.order_pdf_path },
     { label: 'Factura X', url: order.invoice_attachment_url },
-    { label: 'Datos de transferencia', url: order.transfer_attachment_url },
     { label: 'Comprobante de pago', url: order.payment_attachment_url },
     { label: 'Foto/comprobante de envío', url: order.shipping_proof_photo },
   ];
@@ -58,11 +56,11 @@ async function renderPedidosList(container, onOpen, onNew, presetStatusFilter) {
     <div class="page-header">
       <h2>Pedidos</h2>
       <div class="page-actions">
-        <button class="btn btn-primary" id="btn-new-order">+ Nuevo pedido</button>
+        <button class="btn btn-primary" id="btn-new-quote">+ Nuevo presupuesto</button>
       </div>
     </div>
     <div class="search-bar">
-      <input type="text" id="order-search" placeholder="Buscar por cliente o número de pedido...">
+      <input type="text" id="order-search" class="text-input" placeholder="Buscar por cliente o número de pedido...">
       <select id="order-status-filter" style="padding:11px 14px;border-radius:8px;border:1px solid var(--border);background:var(--white);">
         <option value="">Todos los estados</option>
         ${ORDER_STATUSES.map((s, i) => `<option value="${i}">${s}</option>`).join('')}
@@ -72,7 +70,7 @@ async function renderPedidosList(container, onOpen, onNew, presetStatusFilter) {
     <div id="orders-container"><div class="empty-state">Cargando...</div></div>
   `;
 
-  document.getElementById('btn-new-order').addEventListener('click', onNew);
+  document.getElementById('btn-new-quote').addEventListener('click', onNew);
 
   const searchInput = document.getElementById('order-search');
   const statusSelect = document.getElementById('order-status-filter');
@@ -122,223 +120,6 @@ function orderRow(o) {
   `;
 }
 
-async function renderPedidoForm(container, onBack, onCreated) {
-  let selectedClient = null;
-  const items = [];
-
-  container.innerHTML = `
-    <button class="btn btn-secondary" id="btn-back" style="margin-bottom:16px;">← Volver</button>
-    <div class="page-header"><h2>Nuevo pedido</h2></div>
-
-    <div class="detail-section">
-      <h3>Cliente</h3>
-      <div id="client-picker">
-        <input type="text" id="client-search" class="text-input" placeholder="Buscar cliente por nombre o emprendimiento...">
-        <div id="client-results" style="margin-top:8px;"></div>
-      </div>
-      <div id="client-selected" style="display:none;margin-top:10px;font-weight:600;color:var(--pink-dark);"></div>
-    </div>
-
-    <div class="detail-section" id="shipping-section" style="display:none;">
-      <h3>Envío</h3>
-      <div class="field-grid">
-        <div class="field">
-          <label>Tipo de envío</label>
-          <select id="order-shipping-type">
-            <option value="">—</option>
-            <option value="Domicilio">Domicilio</option>
-            <option value="Sucursal">Sucursal</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Transporte habitual</label>
-          <input type="text" id="order-shipping-carrier" class="text-input">
-        </div>
-      </div>
-    </div>
-
-    <div class="detail-section">
-      <h3>Productos</h3>
-      <input type="text" id="product-search" class="text-input" placeholder="Buscar producto por código o descripción...">
-      <div id="product-results" style="margin-top:8px;"></div>
-      <table style="width:100%;border-collapse:collapse;margin-top:16px;" id="items-table" class="items-table-responsive">
-        <thead>
-          <tr style="text-align:left;border-bottom:2px solid var(--border);">
-            <th style="padding:8px 4px;">Producto</th>
-            <th style="padding:8px 4px;">Presentación</th>
-            <th style="padding:8px 4px;">Cantidad</th>
-            <th style="padding:8px 4px;">Precio unit.</th>
-            <th style="padding:8px 4px;">Subtotal</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="items-body"></tbody>
-      </table>
-      <div style="text-align:right;font-weight:700;color:var(--pink-dark);margin-top:10px;font-size:16px;" id="items-total"></div>
-      <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">El precio unitario se puede editar para aplicar descuentos o agregar muestras sin cargo.</p>
-    </div>
-
-    <div class="detail-section">
-      <h3>Notas</h3>
-      <textarea id="order-notes" rows="3" style="width:100%;padding:10px;border-radius:7px;border:1px solid var(--border);background:var(--pink-light);font-family:inherit;"></textarea>
-    </div>
-
-    <button class="btn btn-primary" id="btn-save-order">Crear pedido</button>
-  `;
-
-  document.getElementById('btn-back').addEventListener('click', onBack);
-
-  const clientSearch = document.getElementById('client-search');
-  let clientTimer;
-  clientSearch.addEventListener('input', () => {
-    clearTimeout(clientTimer);
-    clientTimer = setTimeout(async () => {
-      const q = clientSearch.value.trim();
-      if (!q) { document.getElementById('client-results').innerHTML = ''; return; }
-      const results = await Api.get('/api/clients?q=' + encodeURIComponent(q));
-      const resultsEl = document.getElementById('client-results');
-      resultsEl.innerHTML = results.slice(0, 8).map(c => {
-        const name = [c.first_name, c.last_name].filter(Boolean).join(' ');
-        return `<div class="product-list-row" data-client-id="${c.id}" style="padding:8px 12px;margin-bottom:4px;">
-          <div class="info"><strong>#${c.client_number} ${escapeHtml(name)}</strong>${c.business_name ? ' — ' + escapeHtml(c.business_name) : ''}</div>
-        </div>`;
-      }).join('') || '<div class="empty-state" style="padding:12px;">Sin resultados</div>';
-      resultsEl.querySelectorAll('[data-client-id]').forEach(el => {
-        el.addEventListener('click', () => {
-          const c = results.find(r => r.id === Number(el.dataset.clientId));
-          selectedClient = c;
-          const name = [c.first_name, c.last_name].filter(Boolean).join(' ');
-          document.getElementById('client-selected').style.display = 'block';
-          document.getElementById('client-selected').textContent = `Cliente seleccionado: #${c.client_number} ${name}${c.business_name ? ' — ' + c.business_name : ''}`;
-          document.getElementById('shipping-section').style.display = 'block';
-          document.getElementById('order-shipping-type').value = c.shipping_type || '';
-          document.getElementById('order-shipping-carrier').value = c.shipping_carrier || '';
-          resultsEl.innerHTML = '';
-          clientSearch.value = '';
-        });
-      });
-    }, 250);
-  });
-
-  const productSearch = document.getElementById('product-search');
-  let productTimer;
-  productSearch.addEventListener('input', () => {
-    clearTimeout(productTimer);
-    productTimer = setTimeout(async () => {
-      const q = productSearch.value.trim();
-      if (!q) { document.getElementById('product-results').innerHTML = ''; return; }
-      const results = await Api.get('/api/products?q=' + encodeURIComponent(q));
-      const resultsEl = document.getElementById('product-results');
-      resultsEl.innerHTML = results.slice(0, 8).map(p => `
-        <div class="product-list-row" data-product-id="${p.id}" style="padding:8px 12px;margin-bottom:4px;">
-          <div class="info"><strong>${escapeHtml(p.code || 'Sin código')}</strong> — ${escapeHtml(p.description || '')}</div>
-        </div>
-      `).join('') || '<div class="empty-state" style="padding:12px;">Sin resultados</div>';
-      resultsEl.querySelectorAll('[data-product-id]').forEach(el => {
-        el.addEventListener('click', () => {
-          const p = results.find(r => r.id === Number(el.dataset.productId));
-          const allowed = allowedPresentations(p);
-          if (allowed.length === 0) {
-            alert(`El producto ${p.code} no tiene ninguna presentación de venta habilitada.`);
-            return;
-          }
-          items.push({ product: p, presentation: allowed[0].key, quantity: 0, unitPrice: p[allowed[0].priceField] });
-          drawItems();
-          resultsEl.innerHTML = '';
-          productSearch.value = '';
-        });
-      });
-    }, 250);
-  });
-
-  // Recalcula solo el subtotal de la fila y el total general, sin
-  // reconstruir los <input>: si se vuelve a pintar el valor del input en
-  // cada tecleo (como hacía antes con drawItems()), borrar el "1" por
-  // defecto para escribir otro número queda bloqueado porque el número
-  // vacío se convierte al instante de nuevo en 1.
-  function updateItemsTotals() {
-    const body = document.getElementById('items-body');
-    items.forEach((it, idx) => {
-      const row = body.querySelector(`tr[data-idx="${idx}"]`);
-      if (!row) return;
-      const subtotal = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
-      row.querySelector('[data-label="Subtotal"]').textContent = formatMoney(subtotal);
-    });
-    const total = items.reduce((sum, it) => sum + (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0), 0);
-    document.getElementById('items-total').textContent = 'Total: ' + formatMoney(total);
-  }
-
-  function drawItems() {
-    const body = document.getElementById('items-body');
-    body.innerHTML = items.map((it, idx) => {
-      const allowed = allowedPresentations(it.product);
-      const subtotal = it.unitPrice * it.quantity;
-      return `
-        <tr data-idx="${idx}" style="border-bottom:1px solid var(--border);">
-          <td style="padding:8px 4px;" data-label="Producto">${escapeHtml(it.product.code || '')}</td>
-          <td style="padding:8px 4px;" data-label="Presentación">
-            <select data-role="presentation" style="padding:6px;border-radius:6px;border:1px solid var(--border);">
-              ${allowed.map(p => `<option value="${p.key}" ${p.key === it.presentation ? 'selected' : ''}>${p.key}</option>`).join('')}
-            </select>
-          </td>
-          <td style="padding:8px 4px;" data-label="Cantidad"><input type="number" min="0" step="1" data-role="quantity" value="${it.quantity}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
-          <td style="padding:8px 4px;" data-label="Precio unit."><input type="number" min="0" step="0.01" data-role="price" value="${it.unitPrice}" style="width:100px;padding:6px;border-radius:6px;border:1px solid var(--border);"></td>
-          <td style="padding:8px 4px;font-weight:600;" data-label="Subtotal">${formatMoney(subtotal)}</td>
-          <td style="padding:8px 4px;"><button class="btn btn-danger" data-role="remove" style="padding:4px 10px;font-size:12px;">Quitar</button></td>
-        </tr>
-      `;
-    }).join('');
-
-    body.querySelectorAll('tr').forEach(row => {
-      const idx = Number(row.dataset.idx);
-      row.querySelector('[data-role="presentation"]').addEventListener('change', (e) => {
-        const pres = PRESENTATIONS.find(p => p.key === e.target.value);
-        items[idx].presentation = e.target.value;
-        items[idx].unitPrice = items[idx].product[pres.priceField];
-        drawItems();
-      });
-      row.querySelector('[data-role="quantity"]').addEventListener('input', (e) => {
-        items[idx].quantity = e.target.value === '' ? '' : Number(e.target.value);
-        updateItemsTotals();
-      });
-      row.querySelector('[data-role="quantity"]').addEventListener('blur', (e) => {
-        if (!items[idx].quantity || items[idx].quantity <= 0) { items[idx].quantity = 1; e.target.value = 1; updateItemsTotals(); }
-      });
-      row.querySelector('[data-role="price"]').addEventListener('input', (e) => {
-        items[idx].unitPrice = e.target.value === '' ? '' : Number(e.target.value);
-        updateItemsTotals();
-      });
-      row.querySelector('[data-role="price"]').addEventListener('blur', (e) => {
-        if (items[idx].unitPrice === '' || items[idx].unitPrice === null || isNaN(items[idx].unitPrice)) { items[idx].unitPrice = 0; e.target.value = 0; updateItemsTotals(); }
-      });
-      row.querySelector('[data-role="remove"]').addEventListener('click', () => {
-        items.splice(idx, 1);
-        drawItems();
-      });
-    });
-
-    updateItemsTotals();
-  }
-
-  document.getElementById('btn-save-order').addEventListener('click', async () => {
-    if (!selectedClient) { alert('Elegí un cliente para el pedido'); return; }
-    if (items.length === 0) { alert('Agregá al menos un producto'); return; }
-    const payload = {
-      client_id: selectedClient.id,
-      notes: document.getElementById('order-notes').value,
-      shipping_type: document.getElementById('order-shipping-type').value,
-      shipping_carrier: document.getElementById('order-shipping-carrier').value,
-      items: items.map(it => ({ product_id: it.product.id, presentation: it.presentation, quantity: it.quantity, unit_price: it.unitPrice }))
-    };
-    try {
-      const order = await Api.post('/api/orders', payload);
-      onCreated(order.id);
-    } catch (err) {
-      alert(err.message);
-    }
-  });
-}
-
 function amountsMismatch(order) {
   const values = [order.calculated_amount, order.amount_invoice, order.amount_payment].filter(v => v !== null && v !== undefined && v !== '');
   if (values.length < 2) return false;
@@ -371,20 +152,20 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
     const isFinal = order.status_index >= LAST_INDEX;
     const clientName = order.client ? [order.client.first_name, order.client.last_name].filter(Boolean).join(' ') : '';
     const phoneDigits = (order.client && order.client.phone || '').replace(/[^0-9]/g, '');
-    const canRevert = order.status_index > 0 && !order.finalized;
+    const canRevert = order.status_index > 0;
 
     container.innerHTML = `
       <button class="btn btn-secondary" id="btn-back" style="margin-bottom:16px;">← Volver</button>
       <div class="detail-header">
         <div class="detail-title">
-          <div class="eyebrow">PEDIDO #${order.order_number} · ${escapeHtml(order.status_label)}${order.finalized ? ' · FINALIZADO' : ''}${order.modified ? ' · MODIFICADO' : ''}</div>
+          <div class="eyebrow">PEDIDO #${order.order_number} · ${escapeHtml(order.status_label)}${order.modified ? ' · MODIFICADO' : ''}</div>
           <h1>${escapeHtml(clientName)}${order.client && order.client.business_name ? ' — ' + escapeHtml(order.client.business_name) : ''}</h1>
         </div>
         <div class="detail-actions">
           ${phoneDigits ? `<a class="whatsapp-btn-large" href="https://wa.me/${phoneDigits}" target="_blank">${WhatsappIcon} WhatsApp cliente</a>` : ''}
-          ${order.order_pdf_path ? `<button class="btn btn-secondary" id="btn-view-order-pdf">Ver PDF</button>` : ''}
           ${order.status_index === 0 ? '<button class="btn btn-ghost" id="btn-edit-items" title="Editar pedido">✎ Editar</button>' : ''}
           ${canRevert ? '<button class="btn btn-ghost" id="btn-revert">← Retroceder</button>' : ''}
+          <button class="btn btn-danger" id="btn-cancel-order">Cancelar pedido</button>
         </div>
       </div>
 
@@ -399,7 +180,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
         </div>
       ` : ''}
 
-      ${orderAttachments(order).length ? `
+      ${orderAttachments(order).length || order.cbu ? `
         <div class="detail-section">
           <h3>Archivos</h3>
           <div class="attachments-grid">
@@ -410,6 +191,7 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
               </button>
             `).join('')}
           </div>
+          ${order.cbu ? `<div style="margin-top:10px;font-size:13.5px;"><strong>CBU:</strong> ${escapeHtml(order.cbu)}</div>` : ''}
         </div>
       ` : ''}
 
@@ -484,14 +266,22 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       btn.addEventListener('click', () => openAttachment(btn.dataset.url, btn.dataset.label));
     });
 
-    const viewOrderPdfBtn = document.getElementById('btn-view-order-pdf');
-    if (viewOrderPdfBtn) viewOrderPdfBtn.addEventListener('click', () => openPdfPreview(order.order_pdf_path, `pedido-${order.order_number}.pdf`));
-
     const viewPrepPdfBtn = document.getElementById('btn-view-prep-pdf');
     if (viewPrepPdfBtn) viewPrepPdfBtn.addEventListener('click', () => openPdfPreview(order.preparation_pdf_path, `preparacion-${order.order_number}.pdf`));
 
     const editBtn = document.getElementById('btn-edit-items');
     if (editBtn) editBtn.addEventListener('click', startEditing);
+
+    document.getElementById('btn-cancel-order').addEventListener('click', () => {
+      confirmModal({
+        title: 'Cancelar pedido',
+        message: `¿Seguro que querés cancelar el pedido #${order.order_number}? Queda fijo, sin poder avanzar más.`,
+        confirmLabel: 'Cancelar pedido',
+        onConfirm: async () => {
+          try { order = await Api.post(`/api/orders/${order.id}/cancel`); draw(); } catch (err) { alert(err.message); }
+        }
+      });
+    });
 
     const revertBtn = document.getElementById('btn-revert');
     if (revertBtn) {
@@ -678,60 +468,30 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
     const el = document.getElementById('step-section');
 
     if (order.status_index === 0) {
-      const shippingLabel = [order.shipping_type, order.shipping_carrier].filter(Boolean).join(' · ') || 'Sin definir';
+      // Pedido confirmado: el cliente ya aceptó el presupuesto, acá solo
+      // falta mandarlo a facturación.
       el.innerHTML = `
-        <h3>Confirmar o cancelar</h3>
-        <div class="field" style="max-width:340px;margin-bottom:14px;">
-          <label>Envío</label>
-          <select id="order-shipping-type-edit">
-            <option value="">—</option>
-            <option value="Domicilio" ${order.shipping_type === 'Domicilio' ? 'selected' : ''}>Domicilio</option>
-            <option value="Sucursal" ${order.shipping_type === 'Sucursal' ? 'selected' : ''}>Sucursal</option>
-          </select>
-          <input type="text" id="order-shipping-carrier-edit" class="text-input" style="margin-top:8px;" placeholder="Transporte habitual" value="${escapeHtml(order.shipping_carrier || '')}">
-          <button class="btn btn-ghost" id="btn-save-shipping" style="margin-top:8px;">Guardar envío</button>
-        </div>
-        <p style="font-size:13px;color:var(--text-muted);">Enviale el PDF por WhatsApp a Damián para que genere la Factura X, y confirmá el pedido cuando esté todo en orden.</p>
+        <h3>Pedido confirmado</h3>
+        <p style="font-size:13px;color:var(--text-muted);">Cuando esté todo en orden, mandalo a facturación para que Damián genere la Factura X.</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-secondary" id="btn-whatsapp-damian">WhatsApp a Damián</button>
-          <button class="btn btn-primary" id="btn-confirm">Confirmar pedido</button>
-          <button class="btn btn-danger" id="btn-cancel-order">Cancelar pedido</button>
+          <button class="btn btn-primary" id="btn-advance">Enviar a facturación</button>
         </div>
       `;
-      document.getElementById('btn-save-shipping').addEventListener('click', async () => {
-        try {
-          order = await Api.put(`/api/orders/${order.id}`, {
-            shipping_type: document.getElementById('order-shipping-type-edit').value,
-            shipping_carrier: document.getElementById('order-shipping-carrier-edit').value,
-          });
-          draw();
-        } catch (err) { alert(err.message); }
-      });
       document.getElementById('btn-whatsapp-damian').addEventListener('click', async () => {
         const settings = await Api.get('/api/settings');
         if (!settings.damian_phone) { alert('Cargá el teléfono de Damián en Configuración.'); return; }
         const digits = settings.damian_phone.replace(/[^0-9]/g, '');
-        const text = encodeURIComponent(`Pedido #${order.order_number} adjunto (recordá adjuntar el PDF descargado).`);
+        const text = encodeURIComponent(`Pedido #${order.order_number} adjunto (recordá adjuntar el PDF de presupuesto descargado).`);
         window.open(`https://wa.me/${digits}?text=${text}`, '_blank');
       });
-      document.getElementById('btn-confirm').addEventListener('click', () => {
+      document.getElementById('btn-advance').addEventListener('click', () => {
         confirmModal({
-          title: 'Confirmar pedido',
-          message: `Envío: ${shippingLabel}. ¿Confirmás el pedido #${order.order_number} con estos datos?`,
-          confirmLabel: 'Confirmar pedido',
+          title: 'Enviar a facturación',
+          message: `¿Enviás el pedido #${order.order_number} a facturación?`,
+          confirmLabel: 'Enviar a facturación',
           onConfirm: async () => {
             try { order = await Api.post(`/api/orders/${order.id}/advance`, {}); draw(); } catch (err) { alert(err.message); }
-          }
-        });
-      });
-      document.getElementById('btn-cancel-order').addEventListener('click', () => {
-        confirmModal({
-          title: 'Cancelar pedido',
-          message: `¿Seguro que querés cancelar el pedido #${order.order_number}? Queda fijo, sin poder avanzar más.`,
-          confirmLabel: 'Cancelar pedido',
-          onConfirm: async () => {
-            order = await Api.post(`/api/orders/${order.id}/cancel`);
-            draw();
           }
         });
       });
@@ -740,10 +500,10 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
 
     if (order.status_index === 1) {
       el.innerHTML = `
-        <h3>Cargar Factura X y datos de transferencia</h3>
+        <h3>Enviar a facturación</h3>
         <div class="field-grid">
           <div class="field"><label>Factura X (foto o PDF)</label><input type="file" id="field-invoice" accept="image/*,application/pdf"></div>
-          <div class="field"><label>Datos de transferencia (foto o PDF)</label><input type="file" id="field-transfer" accept="image/*,application/pdf"></div>
+          <div class="field"><label>CBU</label><input type="text" id="field-cbu" class="text-input"></div>
           <div class="field"><label>Monto de la Factura X</label><input type="number" step="0.01" id="field-amount-invoice"></div>
         </div>
         <button class="btn btn-primary" id="btn-advance" style="margin-top:14px;">Guardar y continuar</button>
@@ -751,10 +511,10 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       document.getElementById('btn-advance').addEventListener('click', async () => {
         try {
           const invoiceUrl = await uploadField('field-invoice');
-          const transferUrl = await uploadField('field-transfer');
-          if (!invoiceUrl || !transferUrl) { alert('Faltan la Factura X y/o los datos de transferencia'); return; }
+          const cbu = document.getElementById('field-cbu').value.trim();
+          if (!invoiceUrl || !cbu) { alert('Faltan la Factura X y/o el CBU'); return; }
           const amount = document.getElementById('field-amount-invoice').value;
-          const body = { invoice_attachment_url: invoiceUrl, transfer_attachment_url: transferUrl };
+          const body = { invoice_attachment_url: invoiceUrl, cbu };
           if (amount) body.amount_invoice = amount;
           order = await Api.post(`/api/orders/${order.id}/advance`, body);
           draw();
@@ -766,8 +526,8 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
     if (order.status_index === 2) {
       const phoneDigits = (order.client && order.client.phone || '').replace(/[^0-9]/g, '');
       el.innerHTML = `
-        <h3>Enviar datos al cliente</h3>
-        <p style="font-size:13px;color:var(--text-muted);">Mandale por WhatsApp la Factura X y los datos de transferencia (descargalos de los links del historial más abajo y adjuntalos manualmente).</p>
+        <h3>Facturado</h3>
+        <p style="font-size:13px;color:var(--text-muted);">Mandale por WhatsApp la Factura X y el CBU al cliente (los tenés arriba, en "Archivos").</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           ${phoneDigits ? `<a class="btn btn-secondary" href="https://wa.me/${phoneDigits}" target="_blank">WhatsApp al cliente</a>` : ''}
           <button class="btn btn-primary" id="btn-advance">Ya se los envié</button>
@@ -816,17 +576,6 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
 
     if (order.status_index === 4) {
       el.innerHTML = `
-        <h3>Continuar</h3>
-        <button class="btn btn-primary" id="btn-advance">Pasar a preparación</button>
-      `;
-      document.getElementById('btn-advance').addEventListener('click', async () => {
-        try { order = await Api.post(`/api/orders/${order.id}/advance`, {}); draw(); } catch (err) { alert(err.message); }
-      });
-      return;
-    }
-
-    if (order.status_index === 5) {
-      el.innerHTML = `
         <h3>En preparación</h3>
         <button class="btn btn-primary" id="btn-advance">Terminé de preparar</button>
       `;
@@ -836,33 +585,56 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
       return;
     }
 
-    if (order.status_index === 6) {
+    if (order.status_index === 5) {
       el.innerHTML = `
         <h3>Despachar</h3>
+        <p style="font-size:12px;color:var(--text-muted);">Estos datos son opcionales: si todavía no hay número de guía o comprobante, se puede marcar como despachado igual.</p>
         <div class="field-grid">
           <div class="field"><label>Fecha de despacho</label><input type="date" id="field-shipping-date" value="${new Date().toISOString().slice(0,10)}"></div>
-          <div class="field"><label>Número de guía</label><input type="text" id="field-tracking"></div>
+          <div class="field"><label>Número de guía</label><input type="text" id="field-tracking" class="text-input"></div>
           <div class="field full"><label>Comprobante de envío (foto o PDF)</label><input type="file" id="field-shipping-proof" accept="image/*,application/pdf"></div>
         </div>
-        <button class="btn btn-primary" id="btn-advance" style="margin-top:14px;">Marcar despachado</button>
+        <button class="btn btn-primary" id="btn-advance" style="margin-top:14px;">Marcar como despachado</button>
       `;
       document.getElementById('btn-advance').addEventListener('click', async () => {
         try {
           const url = await uploadField('field-shipping-proof');
           const tracking = document.getElementById('field-tracking').value.trim();
           const date = document.getElementById('field-shipping-date').value;
-          if (!url || !tracking || !date) { alert('Completá fecha, número de guía y comprobante'); return; }
-          order = await Api.post(`/api/orders/${order.id}/advance`, { shipping_date: date, tracking_number: tracking, attachment_url: url });
+          const body = {};
+          if (date) body.shipping_date = date;
+          if (tracking) body.tracking_number = tracking;
+          if (url) body.attachment_url = url;
+          order = await Api.post(`/api/orders/${order.id}/advance`, body);
           draw();
         } catch (err) { alert(err.message); }
       });
       return;
     }
 
-    if (order.status_index === DESPACHADO_INDEX) {
+    if (order.status_index === 6) {
       el.innerHTML = `
-        <h3>Continuar</h3>
-        <button class="btn btn-primary" id="btn-advance">Iniciar seguimiento posventa</button>
+        <h3>Despachado</h3>
+        <button class="btn btn-primary" id="btn-advance">Marcar como finalizado</button>
+      `;
+      document.getElementById('btn-advance').addEventListener('click', () => {
+        confirmModal({
+          title: 'Finalizar pedido',
+          message: `¿Confirmás que el pedido #${order.order_number} está finalizado?`,
+          confirmLabel: 'Finalizar',
+          onConfirm: async () => {
+            try { order = await Api.post(`/api/orders/${order.id}/advance`, {}); draw(); } catch (err) { alert(err.message); }
+          }
+        });
+      });
+      return;
+    }
+
+    if (order.status_index === FINALIZADO_INDEX) {
+      el.innerHTML = `
+        <h3>Finalizado</h3>
+        ${order.commission ? `<p>Comisión de esta venta: <strong>${formatMoney(order.commission.amount)}</strong></p>` : ''}
+        <button class="btn btn-primary" id="btn-advance">Continuar seguimiento posventa</button>
       `;
       document.getElementById('btn-advance').addEventListener('click', async () => {
         try { order = await Api.post(`/api/orders/${order.id}/advance`, {}); draw(); } catch (err) { alert(err.message); }
@@ -874,29 +646,13 @@ async function renderPedidoDetail(container, orderId, currentUser, onBack) {
   function drawFinalStepSection() {
     const el = document.getElementById('step-section');
     const phoneDigits = (order.client && order.client.phone || '').replace(/[^0-9]/g, '');
-    if (order.finalized) {
-      el.innerHTML = `<h3>Seguimiento posventa</h3><p style="color:#2e7d32;font-weight:600;">Pedido finalizado.</p>`;
-      return;
-    }
     el.innerHTML = `
       <h3>Seguimiento posventa</h3>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
         ${phoneDigits && order.shipping_proof_photo ? `<a class="btn btn-secondary" href="https://wa.me/${phoneDigits}" target="_blank">WhatsApp comprobante de envío al cliente</a>` : ''}
       </div>
-      <p style="font-size:13px;color:var(--text-muted);">Cuando el cliente confirme que llegó todo bien, marcá el pedido como finalizado.</p>
-      <button class="btn btn-primary" id="btn-finalize">Marcar pedido finalizado</button>
+      <p style="font-size:13px;color:var(--text-muted);margin-top:10px;">Los recordatorios de seguimiento se generan solos según lo configurado en Configuración.</p>
     `;
-    document.getElementById('btn-finalize').addEventListener('click', () => {
-      confirmModal({
-        title: 'Finalizar pedido',
-        message: `¿Confirmás que el pedido #${order.order_number} está finalizado?`,
-        confirmLabel: 'Finalizar',
-        onConfirm: async () => {
-          order = await Api.post(`/api/orders/${order.id}/finalize`);
-          draw();
-        }
-      });
-    });
   }
 
   draw();

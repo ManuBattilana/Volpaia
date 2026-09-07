@@ -90,7 +90,7 @@ const CONTACT_SECTIONS = [
   },
 ];
 
-async function renderContactDetail(container, contactId, onBack, onDeleted, onConverted) {
+async function renderContactDetail(container, contactId, onBack, onDeleted, onConverted, onNewQuote) {
   let contact = contactId ? await Api.get(`/api/contacts/${contactId}`) : {
     first_name: '', last_name: '', business_name: '', status: 'Activo',
     catalog_sent_history: '', pricelist_sent_history: '', converted_client_id: null
@@ -114,9 +114,9 @@ async function renderContactDetail(container, contactId, onBack, onDeleted, onCo
         <div class="detail-actions">
           ${phoneDigits ? `<a class="whatsapp-btn-large" href="https://wa.me/${phoneDigits}" target="_blank">${WhatsappIcon} WhatsApp</a>` : ''}
           ${!editing ? `
+            ${contactId && !alreadyConverted ? '<button class="btn btn-primary" id="btn-new-quote">+ Nuevo presupuesto</button>' : ''}
             <button class="btn btn-secondary" id="btn-edit">Editar</button>
             ${contactId ? '<button class="btn btn-danger" id="btn-delete">Eliminar</button>' : ''}
-            ${contactId && !alreadyConverted ? '<button class="btn btn-primary" id="btn-convert">Convertir a cliente</button>' : ''}
           ` : `
             <button class="btn btn-primary" id="btn-save">Guardar</button>
             <button class="btn btn-ghost" id="btn-cancel">Cancelar</button>
@@ -196,8 +196,8 @@ async function renderContactDetail(container, contactId, onBack, onDeleted, onCo
           }
         });
       });
-      const convertBtn = document.getElementById('btn-convert');
-      if (convertBtn) convertBtn.addEventListener('click', () => openConvertModal(contact, onConverted));
+      const newQuoteBtn = document.getElementById('btn-new-quote');
+      if (newQuoteBtn) newQuoteBtn.addEventListener('click', () => onNewQuote(contact));
     } else {
       document.getElementById('btn-save').addEventListener('click', async () => {
         const payload = {};
@@ -247,44 +247,4 @@ function renderContactFieldEdit(field, contact) {
     return `<div class="field"><label>${field.label}</label><select data-field="${field.key}">${opts}</select></div>`;
   }
   return `<div class="field"><label>${field.label}</label><input type="text" data-field="${field.key}" value="${escapeHtml(val)}"></div>`;
-}
-
-function openConvertModal(contact, onConverted) {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
-    <div class="modal-box modal-box-wide" style="text-align:left;">
-      <h3 style="text-align:center;">Convertir a cliente</h3>
-      <p style="text-align:center;">Se va a crear un cliente nuevo con los datos de este contacto. Completá lo que falta:</p>
-      <div class="field-grid">
-        <div class="field"><label>Razón social</label><input type="text" data-field="fiscal_name"></div>
-        <div class="field"><label>CUIL / DNI</label><input type="text" data-field="fiscal_id"></div>
-        <div class="field"><label>Email</label><input type="text" data-field="email"></div>
-        <div class="field"><label>Dirección</label><input type="text" data-field="address"></div>
-        <div class="field"><label>Código postal</label><input type="text" data-field="postal_code"></div>
-        <div class="field"><label>Tipo de envío</label>
-          <select data-field="shipping_type"><option value="">—</option><option value="Domicilio">Domicilio</option><option value="Sucursal">Sucursal</option></select>
-        </div>
-        <div class="field"><label>Transporte habitual</label><input type="text" data-field="shipping_carrier"></div>
-      </div>
-      <div class="modal-actions" style="margin-top:18px;">
-        <button class="btn btn-ghost" id="modal-cancel">Cancelar</button>
-        <button class="btn btn-primary" id="modal-confirm">Crear cliente</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-  overlay.querySelector('#modal-confirm').addEventListener('click', async () => {
-    const payload = {};
-    overlay.querySelectorAll('[data-field]').forEach(el => { if (el.value) payload[el.dataset.field] = el.value; });
-    try {
-      const result = await Api.post(`/api/contacts/${contact.id}/convert`, payload);
-      overlay.remove();
-      onConverted(result.client.id);
-    } catch (err) {
-      alert(err.message);
-    }
-  });
 }

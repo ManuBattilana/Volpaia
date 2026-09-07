@@ -164,7 +164,7 @@ function renderFieldEdit(field, client) {
   return `<div class="field ${field.full ? 'full' : ''}"><label>${field.label}</label><input type="${field.type || 'text'}" data-field="${field.key}" value="${escapeHtml(val)}"></div>`;
 }
 
-async function renderClientDetail(container, clientId, onBack, onDeleted) {
+async function renderClientDetail(container, clientId, onBack, onDeleted, onNewQuote) {
   let client = clientId ? await Api.get(`/api/clients/${clientId}`) : {
     client_number: null, first_name: '', last_name: '', business_name: '', favorite: 0
   };
@@ -186,6 +186,7 @@ async function renderClientDetail(container, clientId, onBack, onDeleted) {
         <div class="detail-actions">
           ${phoneDigits ? `<a class="whatsapp-btn-large" href="https://wa.me/${phoneDigits}" target="_blank">${WhatsappIcon} WhatsApp</a>` : ''}
           ${!editing ? `
+            ${clientId && onNewQuote ? '<button class="btn btn-secondary" id="btn-new-quote">+ Nuevo presupuesto</button>' : ''}
             <button class="btn btn-secondary" id="btn-edit">Editar</button>
             ${clientId ? '<button class="btn btn-danger" id="btn-delete">Eliminar</button>' : ''}
           ` : `
@@ -217,6 +218,8 @@ async function renderClientDetail(container, clientId, onBack, onDeleted) {
     document.getElementById('btn-back').addEventListener('click', onBack);
 
     if (!editing) {
+      const newQuoteBtn = document.getElementById('btn-new-quote');
+      if (newQuoteBtn) newQuoteBtn.addEventListener('click', () => onNewQuote(client));
       const editBtn = document.getElementById('btn-edit');
       if (editBtn) editBtn.addEventListener('click', () => { editing = true; draw(); });
       const delBtn = document.getElementById('btn-delete');

@@ -20,28 +20,30 @@ function useOwnFonts(doc) {
   doc.font('Body');
 }
 
-function clientLabel(client) {
-  const name = [client.first_name, client.last_name].filter(Boolean).join(' ');
-  return client.business_name ? `${name} — ${client.business_name}` : name;
+function personLabel(person) {
+  const name = [person.first_name, person.last_name].filter(Boolean).join(' ');
+  return person.business_name ? `${name} — ${person.business_name}` : name;
 }
 
 function money(v) {
   return '$' + Number(v || 0).toLocaleString('es-AR');
 }
 
-function shippingLine(client) {
-  if (!client.shipping_type && !client.shipping_carrier) return null;
+function shippingLine(shipping_type, shipping_carrier, shipping_address) {
+  if (!shipping_type && !shipping_carrier) return null;
   const parts = [];
-  if (client.shipping_type) parts.push(client.shipping_type);
-  if (client.shipping_carrier) parts.push(`Transporte: ${client.shipping_carrier}`);
+  if (shipping_type) parts.push(shipping_type);
+  if (shipping_carrier) parts.push(`Transporte: ${shipping_carrier}`);
   let line = `Envío: ${parts.join(' · ')}`;
-  if (client.shipping_address) line += ` — ${client.shipping_address}`;
+  if (shipping_address) line += ` — ${shipping_address}`;
   return line;
 }
 
 // Recuadro "FACTURA X" como el que usa Damián en sus facturas de papel: no
 // es una factura fiscal, es la leyenda habitual para remitos/comprobantes
-// internos de venta mayorista. Se dibuja arriba a la derecha del título.
+// internos de venta mayorista. Va en el Presupuesto (el documento con
+// precios que se le manda a Damián para que facture). Se dibuja arriba a
+// la derecha del título.
 function drawFacturaXBadge(doc) {
   const boxSize = 26;
   const boxX = 470;
@@ -54,14 +56,12 @@ function drawFacturaXBadge(doc) {
   doc.font('Body');
 }
 
-function drawHeader(doc, title, order, seller) {
-  // La leyenda "Factura X" solo tiene sentido en el comprobante de venta
-  // (el PDF de pedido con precios), no en la lista de preparación interna.
+function drawHeader(doc, title, subtitle, seller) {
   // doc.text(str, x, y, ...) con x/y explícitos deja el cursor de flujo
   // (doc.x/doc.y) posicionado ahí, así que hay que devolverlo al margen
   // izquierdo o el resto del documento queda arrastrado a esa columna.
   const topY = doc.y;
-  if (title === 'Pedido') drawFacturaXBadge(doc);
+  if (title === 'Presupuesto') drawFacturaXBadge(doc);
   doc.x = doc.page.margins.left;
   doc.y = topY;
   doc.font('Bold').fillColor(PINK_DARK).fontSize(20).text('VOLPAIA', { continued: false });
@@ -69,80 +69,88 @@ function drawHeader(doc, title, order, seller) {
   doc.font('Body');
   doc.moveDown(0.3);
   doc.fontSize(10).fillColor(TEXT_MUTED)
-    .text(`Pedido #${order.order_number} · ${new Date().toLocaleDateString('es-AR')}${seller ? ' · Vendedor: ' + seller : ''}`);
+    .text(`${subtitle} · ${new Date().toLocaleDateString('es-AR')}${seller ? ' · Vendedor: ' + seller : ''}`);
   doc.moveDown(1);
 }
 
-function drawClientBlock(doc, client, order) {
-  const name = [client.first_name, client.last_name].filter(Boolean).join(' ');
+// `person` es cualquier fila con forma de cliente (un Cliente real, o un
+// Presupuesto que todavía no generó cliente pero ya tiene los mismos
+// campos completos). `shippingOverride` es opcional: para el PDF de un
+// pedido puntual, el envío pudo corregirse distinto al habitual de esa
+// persona.
+function drawClientBlock(doc, person, shippingOverride) {
+  const name = [person.first_name, person.last_name].filter(Boolean).join(' ');
   doc.fillColor('#000000').fontSize(11);
   if (name) doc.text(`Cliente: ${name}`);
-  if (client.business_name) doc.text(`Emprendimiento: ${client.business_name}`);
+  if (person.business_name) doc.text(`Emprendimiento: ${person.business_name}`);
   doc.fontSize(10).fillColor(TEXT_MUTED);
-  if (client.fiscal_name) doc.text(`Razón social: ${client.fiscal_name}`);
-  if (client.fiscal_id) doc.text(`DNI/CUIT: ${client.fiscal_id}`);
-  if (client.phone) doc.text(`Tel: ${client.phone}`);
-  if (client.email) doc.text(`Email: ${client.email}`);
-  const addressParts = [client.address, client.locality, client.postal_code ? `CP ${client.postal_code}` : null, client.province].filter(Boolean);
+  if (person.fiscal_name) doc.text(`Razón social: ${person.fiscal_name}`);
+  if (person.fiscal_id) doc.text(`DNI/CUIT: ${person.fiscal_id}`);
+  if (person.phone) doc.text(`Tel: ${person.phone}`);
+  if (person.email) doc.text(`Email: ${person.email}`);
+  const addressParts = [person.address, person.locality, person.postal_code ? `CP ${person.postal_code}` : null, person.province].filter(Boolean);
   if (addressParts.length) doc.text(`Dirección: ${addressParts.join(', ')}`);
-  // El envío del pedido puede haberse corregido puntualmente; si no, se usa
-  // el habitual del cliente.
-  const shipping = shippingLine({
-    shipping_type: (order && order.shipping_type) || client.shipping_type,
-    shipping_carrier: (order && order.shipping_carrier) || client.shipping_carrier,
-    shipping_address: client.shipping_address,
-  });
+  const shipping = shippingLine(
+    (shippingOverride && shippingOverride.shipping_type) || person.shipping_type,
+    (shippingOverride && shippingOverride.shipping_carrier) || person.shipping_carrier,
+    person.shipping_address
+  );
   if (shipping) doc.text(shipping);
   doc.moveDown(1);
 }
 
+function drawItemsTable(doc, items) {
+  const colX = { desc: 40, pres: 260, qty: 340, price: 400, subtotal: 470 };
+  doc.fontSize(10).fillColor(PINK_DARK);
+  doc.text('Producto', colX.desc, doc.y, { continued: false });
+  doc.text('Present.', colX.pres, doc.y - doc.currentLineHeight());
+  doc.text('Cant.', colX.qty, doc.y - doc.currentLineHeight());
+  doc.text('P. Unit.', colX.price, doc.y - doc.currentLineHeight());
+  doc.text('Subtotal', colX.subtotal, doc.y - doc.currentLineHeight());
+  doc.moveDown(0.5);
+  doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor('#dddddd').stroke();
+  doc.moveDown(0.3);
+
+  let total = 0;
+  doc.fillColor('#000000').fontSize(9.5);
+  items.forEach(it => {
+    const subtotal = it.quantity * it.unit_price;
+    total += subtotal;
+    const y = doc.y;
+    doc.text(`${it.product_code || ''} - ${it.product_description || ''}`, colX.desc, y, { width: 210 });
+    doc.text(it.presentation, colX.pres, y, { width: 70 });
+    doc.text(String(it.quantity), colX.qty, y, { width: 50 });
+    doc.text(money(it.unit_price), colX.price, y, { width: 60 });
+    doc.text(money(subtotal), colX.subtotal, y, { width: 80 });
+    doc.moveDown(0.8);
+  });
+
+  doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor('#dddddd').stroke();
+  doc.moveDown(0.5);
+  doc.fontSize(12).fillColor(PINK_DARK).text(`Total: ${money(total)}`, { align: 'right' });
+}
+
 /**
- * PDF completo del pedido, con precios. Se genera al crear el pedido y se
- * regenera cada vez que se edita mientras está en "Pedido creado".
+ * PDF del Presupuesto: con precios y totales, lleva la leyenda "Factura X"
+ * porque es el documento que se le manda a Damián para facturar. Se genera
+ * al crear el presupuesto y se regenera cada vez que se edita mientras está
+ * "Pendiente". Al confirmarse, este mismo PDF pasa a ser el del Pedido.
  */
-function generateOrderPdf(filePath, { order, items, client, seller }) {
+function generateQuotePdf(filePath, { quote, items, seller }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40 });
     useOwnFonts(doc);
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
 
-    drawHeader(doc, 'Pedido', order, seller);
-    drawClientBlock(doc, client, order);
+    drawHeader(doc, 'Presupuesto', `Presupuesto #${quote.quote_number}`, seller);
+    drawClientBlock(doc, quote);
+    drawItemsTable(doc, items);
 
-    const colX = { desc: 40, pres: 260, qty: 340, price: 400, subtotal: 470 };
-    doc.fontSize(10).fillColor(PINK_DARK);
-    doc.text('Producto', colX.desc, doc.y, { continued: false });
-    doc.text('Present.', colX.pres, doc.y - doc.currentLineHeight());
-    doc.text('Cant.', colX.qty, doc.y - doc.currentLineHeight());
-    doc.text('P. Unit.', colX.price, doc.y - doc.currentLineHeight());
-    doc.text('Subtotal', colX.subtotal, doc.y - doc.currentLineHeight());
-    doc.moveDown(0.5);
-    doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor('#dddddd').stroke();
-    doc.moveDown(0.3);
-
-    let total = 0;
-    doc.fillColor('#000000').fontSize(9.5);
-    items.forEach(it => {
-      const subtotal = it.quantity * it.unit_price;
-      total += subtotal;
-      const y = doc.y;
-      doc.text(`${it.product_code || ''} - ${it.product_description || ''}`, colX.desc, y, { width: 210 });
-      doc.text(it.presentation, colX.pres, y, { width: 70 });
-      doc.text(String(it.quantity), colX.qty, y, { width: 50 });
-      doc.text(money(it.unit_price), colX.price, y, { width: 60 });
-      doc.text(money(subtotal), colX.subtotal, y, { width: 80 });
-      doc.moveDown(0.8);
-    });
-
-    doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor('#dddddd').stroke();
-    doc.moveDown(0.5);
-    doc.fontSize(12).fillColor(PINK_DARK).text(`Total: ${money(total)}`, { align: 'right' });
-
-    if (order.notes) {
+    if (quote.notes) {
       doc.moveDown(1);
       doc.fontSize(10).fillColor(TEXT_MUTED).text('Notas:');
-      doc.fillColor('#000000').text(order.notes);
+      doc.fillColor('#000000').text(quote.notes);
     }
 
     doc.end();
@@ -163,7 +171,7 @@ function generatePreparationPdf(filePath, { order, items, client, seller }) {
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
 
-    drawHeader(doc, 'Lista de preparación', order, seller);
+    drawHeader(doc, 'Lista de preparación', `Pedido #${order.order_number}`, seller);
     drawClientBlock(doc, client, order);
 
     doc.fontSize(11);
@@ -183,4 +191,4 @@ function generatePreparationPdf(filePath, { order, items, client, seller }) {
   });
 }
 
-module.exports = { generateOrderPdf, generatePreparationPdf };
+module.exports = { generateQuotePdf, generatePreparationPdf };
